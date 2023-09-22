@@ -1,5 +1,3 @@
-// +build ignore
-
 #include "vmlinux.h"
 #include "goroutine.h"
 
@@ -8,9 +6,10 @@
 
 SEC("uprobe/runtime.makechan")
 int runtime_makechan(struct pt_regs *ctx) {
-    int64_t goid = get_goroutine_id();
-    if (!goid) {
-        bpf_printk("get goroutine id failed\n");
+    struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+    int64_t goid = 0;
+    if (read_goroutine_id(task, &goid)) {
+        bpf_printk("read goroutine id failed\n");
         return 0;
     }
     bpf_printk("goroutine id: %d\n", goid);

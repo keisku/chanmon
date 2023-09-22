@@ -36,30 +36,26 @@ struct g_t {
     int64_t goid;
 };
 
-// get_goroutine_id returns the goroutine id of the current goroutine.
-// 0 on failure.
-static __always_inline int64_t get_goroutine_id() {
-    struct task_struct *task = (struct task_struct *)bpf_get_current_task();
-    if (task == NULL) {
-        return 0;
-    }
-
+// read_goroutine_id reads the goroutine id from the task_struct.
+// 1 on failure.
+static __always_inline int read_goroutine_id(struct task_struct *task, int64_t *goroutine_id) {
     void *base;
     BPF_CORE_READ_INTO(&base, &(task->thread), fsbase);
     if (base == NULL) {
-        return 0;
+        return 1;
     }
 
     // https://www.usenix.org/conference/srecon23apac/presentation/liang
     uintptr_t g_addr = 0;
     if (bpf_core_read_user(&g_addr, sizeof(uintptr_t), base - 8)) {
-        return 0;
+        return 1;
     }
 
     struct g_t g;
-    if (bpf_probe_read_user(&g, sizeof(struct g_t), (void *)g_addr)) {
-        return 0;
+    if (bpf_core_read_user(&g, sizeof(struct g_t), (void *)g_addr)) {
+        return 1;
     }
+    *goroutine_id = g.goid;
 
-    return g.goid;
+    return 0;
 }
