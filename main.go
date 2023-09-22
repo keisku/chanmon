@@ -23,7 +23,13 @@ func main() {
 		errlog.Fatalln(err)
 	}
 
-	ebpf.Run(ctx, os.Args[1])
+	err, eBPFClose := ebpf.Run(ctx, os.Args[1])
+	if err != nil {
+		errlog.Fatalln(err)
+	}
 
 	<-ctx.Done()
+	if err := eBPFClose(); err != nil {
+		errlog.Println(err)
+	}
 }
