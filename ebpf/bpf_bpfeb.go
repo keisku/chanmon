@@ -12,6 +12,18 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type bpfMakechanEvent struct {
+	StackId  int32
+	ChanSize int32
+}
+
+type bpfMakechanEventKey struct {
+	GoroutineId int64
+	Ktime       uint64
+}
+
+type bpfStackTraceT [20]uint64
+
 // loadBpf returns the embedded CollectionSpec for bpf.
 func loadBpf() (*ebpf.CollectionSpec, error) {
 	reader := bytes.NewReader(_BpfBytes)
@@ -60,6 +72,8 @@ type bpfProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfMapSpecs struct {
+	MakechanEvents *ebpf.MapSpec `ebpf:"makechan_events"`
+	StackAddresses *ebpf.MapSpec `ebpf:"stack_addresses"`
 }
 
 // bpfObjects contains all objects after they have been loaded into the kernel.
@@ -81,10 +95,15 @@ func (o *bpfObjects) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfMaps struct {
+	MakechanEvents *ebpf.Map `ebpf:"makechan_events"`
+	StackAddresses *ebpf.Map `ebpf:"stack_addresses"`
 }
 
 func (m *bpfMaps) Close() error {
-	return _BpfClose()
+	return _BpfClose(
+		m.MakechanEvents,
+		m.StackAddresses,
+	)
 }
 
 // bpfPrograms contains all programs after they have been loaded into the kernel.

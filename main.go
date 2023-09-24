@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 
@@ -23,13 +24,13 @@ func main() {
 		errlog.Fatalln(err)
 	}
 
-	err, eBPFClose := ebpf.Run(ctx, os.Args[1])
+	eBPFClose, err := ebpf.Run(ctx, os.Args[1])
 	if err != nil {
 		errlog.Fatalln(err)
 	}
+	slog.Info("eBPF program running")
 
 	<-ctx.Done()
-	if err := eBPFClose(); err != nil {
-		errlog.Println(err)
-	}
+	slog.Info("chanmon exiting")
+	eBPFClose()
 }
