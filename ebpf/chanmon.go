@@ -34,6 +34,10 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 	if err != nil {
 		return cancel, err
 	}
+	uretRuntimeChansend, err := ex.Uretprobe("runtime.chansend", objs.RuntimeChansend, nil)
+	if err != nil {
+		return cancel, err
+	}
 	go func() {
 		for {
 			select {
@@ -44,11 +48,17 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 				if err := processMakechanEvents(&objs); err != nil {
 					slog.Warn(err.Error())
 				}
+				if err := processChansendEvents(&objs); err != nil {
+					slog.Warn(err.Error())
+				}
 			}
 		}
 	}()
 	return func() {
 		if err := uretRuntimeMakechan.Close(); err != nil {
+			slog.Warn("Failed to close uretprobe: %s", err)
+		}
+		if err := uretRuntimeChansend.Close(); err != nil {
 			slog.Warn("Failed to close uretprobe: %s", err)
 		}
 		if err := objs.Close(); err != nil {
@@ -91,6 +101,45 @@ func processMakechanEvents(objs *bpfObjects) error {
 			slog.Debug("Deleted eBPF map key-values, makechan_events", slog.Int("deleted", n))
 		} else {
 			slog.Warn("Failed to delete makechan_events", slog.String("error", err.Error()))
+		}
+	}
+	deleteStackAddresses(objs, stackIdSetToDelete)
+	return nil
+}
+
+func processChansendEvents(objs *bpfObjects) error {
+	var key bpfChansendEventKey
+	var event bpfChansendEvent
+	var keysToDelete []bpfChansendEventKey
+	stackIdSetToDelete := make(map[int32]struct{})
+
+	events := objs.ChansendEvents.Iterate()
+	for events.Next(&key, &event) {
+		stackAddrs, err := extractStackAddresses(objs, event.StackId)
+		if err != nil {
+			slog.Warn(err.Error())
+			continue
+		}
+		if _, ok := stackIdSetToDelete[event.StackId]; !ok {
+			stackIdSetToDelete[event.StackId] = struct{}{}
+		}
+		keysToDelete = append(keysToDelete, key)
+		slog.Info("runtime.chansend",
+			slog.Int64("goroutine_id", int64(key.GoroutineId)),
+			slog.Int64("stack_id", int64(event.StackId)),
+			slog.Bool("block", event.Block),
+			slog.Any("stack_addrs", stackAddrs),
+		)
+	}
+	if err := events.Err(); err != nil {
+		return fmt.Errorf("failed to iterate goroutine stack ids: %w", err)
+	}
+
+	if 0 < len(keysToDelete) {
+		if n, err := objs.ChansendEvents.BatchDelete(keysToDelete, nil); err == nil {
+			slog.Debug("Deleted eBPF map key-values, chansend_events", slog.Int("deleted", n))
+		} else {
+			slog.Warn("Failed to delete chansend_events", slog.String("error", err.Error()))
 		}
 	}
 	deleteStackAddresses(objs, stackIdSetToDelete)

@@ -12,6 +12,17 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type bpfChansendEvent struct {
+	StackId int32
+	Block   bool
+	_       [3]byte
+}
+
+type bpfChansendEventKey struct {
+	GoroutineId int64
+	Ktime       uint64
+}
+
 type bpfMakechanEvent struct {
 	StackId  int32
 	ChanSize int32
@@ -65,6 +76,7 @@ type bpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfProgramSpecs struct {
+	RuntimeChansend *ebpf.ProgramSpec `ebpf:"runtime_chansend"`
 	RuntimeMakechan *ebpf.ProgramSpec `ebpf:"runtime_makechan"`
 }
 
@@ -72,6 +84,7 @@ type bpfProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfMapSpecs struct {
+	ChansendEvents *ebpf.MapSpec `ebpf:"chansend_events"`
 	MakechanEvents *ebpf.MapSpec `ebpf:"makechan_events"`
 	StackAddresses *ebpf.MapSpec `ebpf:"stack_addresses"`
 }
@@ -95,12 +108,14 @@ func (o *bpfObjects) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfMaps struct {
+	ChansendEvents *ebpf.Map `ebpf:"chansend_events"`
 	MakechanEvents *ebpf.Map `ebpf:"makechan_events"`
 	StackAddresses *ebpf.Map `ebpf:"stack_addresses"`
 }
 
 func (m *bpfMaps) Close() error {
 	return _BpfClose(
+		m.ChansendEvents,
 		m.MakechanEvents,
 		m.StackAddresses,
 	)
@@ -110,11 +125,13 @@ func (m *bpfMaps) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfPrograms struct {
+	RuntimeChansend *ebpf.Program `ebpf:"runtime_chansend"`
 	RuntimeMakechan *ebpf.Program `ebpf:"runtime_makechan"`
 }
 
 func (p *bpfPrograms) Close() error {
 	return _BpfClose(
+		p.RuntimeChansend,
 		p.RuntimeMakechan,
 	)
 }

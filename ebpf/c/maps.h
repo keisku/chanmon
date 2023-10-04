@@ -24,6 +24,8 @@ typedef __u64 stack_trace_t[MAX_STACK_DEPTH];
 #define BPF_STACK_TRACE(_name, _max_entries) \
     BPF_MAP(_name, BPF_MAP_TYPE_STACK_TRACE, u32, stack_trace_t, _max_entries)
 
+BPF_STACK_TRACE(stack_addresses, MAX_STACK_ADDRESSES); // store stack traces
+
 struct makechan_event_key {
     int64_t goroutine_id;
     uint64_t ktime; // To make this struct unique
@@ -35,6 +37,17 @@ struct makechan_event {
 };
 
 BPF_HASH(makechan_events, struct makechan_event_key, struct makechan_event, 10240);
-BPF_STACK_TRACE(stack_addresses, MAX_STACK_ADDRESSES); // store stack traces
+
+struct chansend_event_key {
+    int64_t goroutine_id;
+    uint64_t ktime; // To make this struct unique
+};
+
+struct chansend_event {
+    int stack_id;
+    bool block;
+};
+
+BPF_HASH(chansend_events, struct chansend_event_key, struct chansend_event, 10240);
 
 #endif /* __MAPS_H__ */
