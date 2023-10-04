@@ -3,6 +3,7 @@ package ebpf
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"log/slog"
 	"strconv"
 	"time"
@@ -16,6 +17,8 @@ import (
 // maxStackDepth is the max depth of each stack trace to track
 // Matches 'MAX_STACK_DEPTH' in eBPF code
 const maxStackDepth = 20
+
+var stackFrameSize = (strconv.IntSize / 8)
 
 func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 	wrappedCtx, cancel := context.WithCancel(ctx)
@@ -32,74 +35,92 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 		return cancel, err
 	}
 	go func() {
-		ticker := time.NewTicker(200 * time.Millisecond)
-		stackFrameSize := (strconv.IntSize / 8)
-		var makechanEventKey bpfMakechanEventKey
-		var makechanEvent bpfMakechanEvent
 		for {
 			select {
 			case <-wrappedCtx.Done():
 				slog.Info("Closing uprobe")
 				return
-			case <-ticker.C:
-				stackAddrs := make([]uint64, maxStackDepth)
-				var makechanEventKeysToDelete []bpfMakechanEventKey
-				stackIdSetToDelete := make(map[int32]struct{})
-
-				makechanEvents := objs.MakechanEvents.Iterate()
-				for makechanEvents.Next(&makechanEventKey, &makechanEvent) {
-					stackBytes, err := objs.StackAddresses.LookupBytes(makechanEvent.StackId)
-					if err != nil {
-						slog.Warn("Failed to lookup stack address", slog.String("error", err.Error()))
-						continue
-					}
-					stackCounter := 0
-					for i := 0; i < len(stackBytes); i += stackFrameSize {
-						stackBytes[stackCounter] = 0
-						stackAddr := binary.LittleEndian.Uint64(stackBytes[i : i+stackFrameSize])
-						if stackAddr == 0 {
-							break
-						}
-						stackAddrs[stackCounter] = stackAddr
-						stackCounter++
-					}
-					if _, ok := stackIdSetToDelete[makechanEvent.StackId]; !ok {
-						stackIdSetToDelete[makechanEvent.StackId] = struct{}{}
-					}
-					makechanEventKeysToDelete = append(makechanEventKeysToDelete, makechanEventKey)
-					slog.Info("runtime.makechan",
-						slog.Int64("goroutine_id", int64(makechanEventKey.GoroutineId)),
-						slog.Int64("stack_id", int64(makechanEvent.StackId)),
-						slog.Int64("chan_size", int64(makechanEvent.ChanSize)),
-						slog.Any("stack_addrs", stackAddrs[0:stackCounter]),
-					)
-				}
-				if err := makechanEvents.Err(); err != nil {
-					slog.Warn("Failed to iterate goroutine stack ids", slog.String("error", err.Error()))
-					continue
-				}
-				if 0 < len(makechanEventKeysToDelete) {
-					if n, err := objs.MakechanEvents.BatchDelete(makechanEventKeysToDelete, nil); err == nil {
-						slog.Debug("Deleted eBPF map key-values, makechan_events", slog.Int("deleted", n))
-					} else {
-						slog.Warn("Failed to delete makechan_events", slog.String("error", err.Error()))
-					}
-				}
-				for stackId := range stackIdSetToDelete {
-					if err := objs.StackAddresses.Delete(stackId); err != nil {
-						slog.Warn("Failed to delete stack_addresses", slog.String("error", err.Error()))
-					}
+			case <-time.Tick(200 * time.Millisecond):
+				if err := processMakechanEvents(&objs); err != nil {
+					slog.Warn(err.Error())
 				}
 			}
 		}
 	}()
 	return func() {
 		if err := uretRuntimeMakechan.Close(); err != nil {
-			slog.Warn("Failed to close uprobe: %s", err)
+			slog.Warn("Failed to close uretprobe: %s", err)
 		}
 		if err := objs.Close(); err != nil {
 			slog.Warn("Failed to close bpf objects: %s", err)
 		}
 		cancel()
 	}, nil
+}
+
+func processMakechanEvents(objs *bpfObjects) error {
+	var key bpfMakechanEventKey
+	var event bpfMakechanEvent
+	var keysToDelete []bpfMakechanEventKey
+	stackIdSetToDelete := make(map[int32]struct{})
+
+	events := objs.MakechanEvents.Iterate()
+	for events.Next(&key, &event) {
+		stackAddrs, err := extractStackAddresses(objs, event.StackId)
+		if err != nil {
+			slog.Warn(err.Error())
+			continue
+		}
+		if _, ok := stackIdSetToDelete[event.StackId]; !ok {
+			stackIdSetToDelete[event.StackId] = struct{}{}
+		}
+		keysToDelete = append(keysToDelete, key)
+		slog.Info("runtime.makechan",
+			slog.Int64("goroutine_id", int64(key.GoroutineId)),
+			slog.Int64("stack_id", int64(event.StackId)),
+			slog.Int64("chan_size", int64(event.ChanSize)),
+			slog.Any("stack_addrs", stackAddrs),
+		)
+	}
+	if err := events.Err(); err != nil {
+		return fmt.Errorf("failed to iterate goroutine stack ids: %w", err)
+	}
+
+	if 0 < len(keysToDelete) {
+		if n, err := objs.MakechanEvents.BatchDelete(keysToDelete, nil); err == nil {
+			slog.Debug("Deleted eBPF map key-values, makechan_events", slog.Int("deleted", n))
+		} else {
+			slog.Warn("Failed to delete makechan_events", slog.String("error", err.Error()))
+		}
+	}
+	deleteStackAddresses(objs, stackIdSetToDelete)
+	return nil
+}
+
+func deleteStackAddresses(objs *bpfObjects, stackIdSet map[int32]struct{}) {
+	for stackId := range stackIdSet {
+		if err := objs.StackAddresses.Delete(stackId); err != nil {
+			slog.Warn("Failed to delete stack_addresses", slog.String("error", err.Error()))
+			continue
+		}
+	}
+}
+
+func extractStackAddresses(objs *bpfObjects, stackId int32) ([]uint64, error) {
+	stackAddrs := make([]uint64, maxStackDepth)
+	stackBytes, err := objs.StackAddresses.LookupBytes(stackId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to lookup stack address: %w", err)
+	}
+	stackCounter := 0
+	for i := 0; i < len(stackBytes); i += stackFrameSize {
+		stackBytes[stackCounter] = 0
+		stackAddr := binary.LittleEndian.Uint64(stackBytes[i : i+stackFrameSize])
+		if stackAddr == 0 {
+			break
+		}
+		stackAddrs[stackCounter] = stackAddr
+		stackCounter++
+	}
+	return stackAddrs[0:stackCounter], nil
 }
