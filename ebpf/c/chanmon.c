@@ -8,7 +8,7 @@
 
 // func makechan(t *chantype, size int) *hchan
 // https://github.com/golang/go/blob/go1.21.1/src/runtime/chan.go#L72
-SEC("uprobe/runtime.makechan")
+SEC("uretprobe/runtime.makechan")
 int runtime_makechan(struct pt_regs *ctx) {
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
     int64_t go_id = 0;
@@ -23,13 +23,17 @@ int runtime_makechan(struct pt_regs *ctx) {
         return 0;
     }
 
+    void *sp = (void *)PT_REGS_SP_CORE(ctx);
+    int64_t chan_size = 0;
+    bpf_core_read_user(&chan_size, sizeof(int64_t), sp + 0x8);
+
     struct makechan_event_key key = {
         .goroutine_id = go_id,
         .ktime = bpf_ktime_get_ns(),
     };
     struct makechan_event event = {
         .stack_id = stack_id,
-        .chan_size = -1, // TODO: get chan size
+        .chan_size = chan_size,
     };
     bpf_map_update_elem(&makechan_events, &key, &event, BPF_ANY);
     return 0;

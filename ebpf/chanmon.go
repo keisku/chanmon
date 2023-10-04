@@ -11,7 +11,7 @@ import (
 )
 
 // $BPF_CLANG and $BPF_CFLAGS are set by the Makefile.
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc $BPF_CLANG -cflags $BPF_CFLAGS bpf ./c/chanmon.c -- -I./c
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc $BPF_CLANG -target amd64 -cflags $BPF_CFLAGS bpf ./c/chanmon.c -- -I./c
 
 // maxStackDepth is the max depth of each stack trace to track
 // Matches 'MAX_STACK_DEPTH' in eBPF code
@@ -27,7 +27,7 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 	if err != nil {
 		return cancel, err
 	}
-	up, err := ex.Uprobe("runtime.makechan", objs.RuntimeMakechan, nil)
+	uretRuntimeMakechan, err := ex.Uretprobe("runtime.makechan", objs.RuntimeMakechan, nil)
 	if err != nil {
 		return cancel, err
 	}
@@ -94,7 +94,7 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 		}
 	}()
 	return func() {
-		if err := up.Close(); err != nil {
+		if err := uretRuntimeMakechan.Close(); err != nil {
 			slog.Warn("Failed to close uprobe: %s", err)
 		}
 		if err := objs.Close(); err != nil {
