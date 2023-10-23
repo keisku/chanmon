@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cilium/ebpf/link"
+	"github.com/keisku/chanmon/debuginfo"
 )
 
 // $BPF_CLANG and $BPF_CFLAGS are set by the Makefile.
@@ -24,6 +25,9 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 	wrappedCtx, cancel := context.WithCancel(ctx)
 	objs := bpfObjects{}
 	if err := loadBpfObjects(&objs, nil); err != nil {
+		return cancel, err
+	}
+	if err := debuginfo.Init(binPath); err != nil {
 		return cancel, err
 	}
 	ex, err := link.OpenExecutable(binPath)
@@ -76,7 +80,7 @@ func processMakechanEvents(objs *bpfObjects) error {
 
 	events := objs.MakechanEvents.Iterate()
 	for events.Next(&key, &event) {
-		stackAddrs, err := extractStackAddresses(objs, event.StackId)
+		stack, err := extractStack(objs, event.StackId)
 		if err != nil {
 			slog.Warn(err.Error())
 			continue
@@ -89,7 +93,7 @@ func processMakechanEvents(objs *bpfObjects) error {
 			slog.Int64("goroutine_id", int64(key.GoroutineId)),
 			slog.Int64("stack_id", int64(event.StackId)),
 			slog.Int64("chan_size", int64(event.ChanSize)),
-			slog.Any("stack_addrs", stackAddrs),
+			slog.Any("stack", stack),
 		)
 	}
 	if err := events.Err(); err != nil {
@@ -115,7 +119,7 @@ func processChansendEvents(objs *bpfObjects) error {
 
 	events := objs.ChansendEvents.Iterate()
 	for events.Next(&key, &event) {
-		stackAddrs, err := extractStackAddresses(objs, event.StackId)
+		stack, err := extractStack(objs, event.StackId)
 		if err != nil {
 			slog.Warn(err.Error())
 			continue
@@ -128,7 +132,7 @@ func processChansendEvents(objs *bpfObjects) error {
 			slog.Int64("goroutine_id", int64(key.GoroutineId)),
 			slog.Int64("stack_id", int64(event.StackId)),
 			slog.Bool("block", event.Block),
-			slog.Any("stack_addrs", stackAddrs),
+			slog.Any("stack", stack),
 		)
 	}
 	if err := events.Err(); err != nil {
@@ -155,8 +159,8 @@ func deleteStackAddresses(objs *bpfObjects, stackIdSet map[int32]struct{}) {
 	}
 }
 
-func extractStackAddresses(objs *bpfObjects, stackId int32) ([]uint64, error) {
-	stackAddrs := make([]uint64, maxStackDepth)
+func extractStack(objs *bpfObjects, stackId int32) ([]string, error) {
+	stack := make([]string, maxStackDepth)
 	stackBytes, err := objs.StackAddresses.LookupBytes(stackId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to lookup stack address: %w", err)
@@ -168,8 +172,8 @@ func extractStackAddresses(objs *bpfObjects, stackId int32) ([]uint64, error) {
 		if stackAddr == 0 {
 			break
 		}
-		stackAddrs[stackCounter] = stackAddr
+		stack[stackCounter] = debuginfo.Addr2Line(stackAddr)
 		stackCounter++
 	}
-	return stackAddrs[0:stackCounter], nil
+	return stack[0:stackCounter], nil
 }
