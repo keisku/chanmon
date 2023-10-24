@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime"
 
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/keisku/chanmon/ebpf"
@@ -17,6 +18,10 @@ var level slog.Level
 
 func main() {
 	errlog := log.New(os.Stderr, "", log.LstdFlags)
+
+	if runtime.GOARCH != "amd64" || runtime.GOOS != "linux" {
+		errlog.Fatalln("chanmon only works on amd64 Linux")
+	}
 
 	flag.TextVar(&level, "level", level, fmt.Sprintf("log level could be one of %q",
 		[]slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError}))
