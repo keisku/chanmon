@@ -56,9 +56,7 @@ int runtime_chansend(struct pt_regs *ctx) {
         return 0;
     }
 
-    void *sp = (void *)PT_REGS_SP_CORE(ctx);
-    bool block = 0;
-    bpf_core_read_user(&block, sizeof(bool), sp + 0x10); // TODO: Make sure this is correct
+    bool block = PT_REGS_RC_CORE(ctx);
 
     struct chansend_event_key key = {
         .goroutine_id = go_id,
