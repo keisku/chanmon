@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"flag"
+	"fmt"
 	"log"
 	"log/slog"
 	"os"
@@ -11,12 +13,17 @@ import (
 	"github.com/keisku/chanmon/ebpf"
 )
 
+var level slog.Level
+
 func main() {
 	errlog := log.New(os.Stderr, "", log.LstdFlags)
 
-	if len(os.Args) != 2 {
-		errlog.Fatalln("Usage: chanmon <path to executable>")
-	}
+	flag.TextVar(&level, "level", level, fmt.Sprintf("log level could be one of %q",
+		[]slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError}))
+	flag.Parse()
+	opts := &slog.HandlerOptions{Level: level}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, opts)))
+
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
@@ -24,7 +31,7 @@ func main() {
 		errlog.Fatalln(err)
 	}
 
-	eBPFClose, err := ebpf.Run(ctx, os.Args[1])
+	eBPFClose, err := ebpf.Run(ctx, os.Args[len(os.Args)-1])
 	if err != nil {
 		errlog.Fatalln(err)
 	}
