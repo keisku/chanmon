@@ -12,10 +12,19 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type bpfChansendContext struct{ Type uint32 }
+
+type bpfChansendContextKey struct {
+	GoroutineId        int64
+	HchanPtr           uint64
+	InstructionPointer uint64
+}
+
 type bpfChansendEvent struct {
-	StackId int32
-	Block   bool
-	_       [3]byte
+	StackId     int32
+	Block       bool
+	_           [3]byte
+	ContextType uint32
 }
 
 type bpfChansendEventKey struct {
@@ -76,17 +85,21 @@ type bpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfProgramSpecs struct {
-	RuntimeChansend *ebpf.ProgramSpec `ebpf:"runtime_chansend"`
-	RuntimeMakechan *ebpf.ProgramSpec `ebpf:"runtime_makechan"`
+	RuntimeChansend          *ebpf.ProgramSpec `ebpf:"runtime_chansend"`
+	RuntimeChansend1Enter    *ebpf.ProgramSpec `ebpf:"runtime_chansend1_enter"`
+	RuntimeChansendEnter     *ebpf.ProgramSpec `ebpf:"runtime_chansend_enter"`
+	RuntimeMakechan          *ebpf.ProgramSpec `ebpf:"runtime_makechan"`
+	RuntimeSelectnbsendEnter *ebpf.ProgramSpec `ebpf:"runtime_selectnbsend_enter"`
 }
 
 // bpfMapSpecs contains maps before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfMapSpecs struct {
-	ChansendEvents *ebpf.MapSpec `ebpf:"chansend_events"`
-	MakechanEvents *ebpf.MapSpec `ebpf:"makechan_events"`
-	StackAddresses *ebpf.MapSpec `ebpf:"stack_addresses"`
+	ChansendContexts *ebpf.MapSpec `ebpf:"chansend_contexts"`
+	ChansendEvents   *ebpf.MapSpec `ebpf:"chansend_events"`
+	MakechanEvents   *ebpf.MapSpec `ebpf:"makechan_events"`
+	StackAddresses   *ebpf.MapSpec `ebpf:"stack_addresses"`
 }
 
 // bpfObjects contains all objects after they have been loaded into the kernel.
@@ -108,13 +121,15 @@ func (o *bpfObjects) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfMaps struct {
-	ChansendEvents *ebpf.Map `ebpf:"chansend_events"`
-	MakechanEvents *ebpf.Map `ebpf:"makechan_events"`
-	StackAddresses *ebpf.Map `ebpf:"stack_addresses"`
+	ChansendContexts *ebpf.Map `ebpf:"chansend_contexts"`
+	ChansendEvents   *ebpf.Map `ebpf:"chansend_events"`
+	MakechanEvents   *ebpf.Map `ebpf:"makechan_events"`
+	StackAddresses   *ebpf.Map `ebpf:"stack_addresses"`
 }
 
 func (m *bpfMaps) Close() error {
 	return _BpfClose(
+		m.ChansendContexts,
 		m.ChansendEvents,
 		m.MakechanEvents,
 		m.StackAddresses,
@@ -125,14 +140,20 @@ func (m *bpfMaps) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfPrograms struct {
-	RuntimeChansend *ebpf.Program `ebpf:"runtime_chansend"`
-	RuntimeMakechan *ebpf.Program `ebpf:"runtime_makechan"`
+	RuntimeChansend          *ebpf.Program `ebpf:"runtime_chansend"`
+	RuntimeChansend1Enter    *ebpf.Program `ebpf:"runtime_chansend1_enter"`
+	RuntimeChansendEnter     *ebpf.Program `ebpf:"runtime_chansend_enter"`
+	RuntimeMakechan          *ebpf.Program `ebpf:"runtime_makechan"`
+	RuntimeSelectnbsendEnter *ebpf.Program `ebpf:"runtime_selectnbsend_enter"`
 }
 
 func (p *bpfPrograms) Close() error {
 	return _BpfClose(
 		p.RuntimeChansend,
+		p.RuntimeChansend1Enter,
+		p.RuntimeChansendEnter,
 		p.RuntimeMakechan,
+		p.RuntimeSelectnbsendEnter,
 	)
 }
 

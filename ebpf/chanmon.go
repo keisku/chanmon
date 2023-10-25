@@ -38,10 +38,23 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 	if err != nil {
 		return cancel, err
 	}
+	runtimeChansend1Enter, err := ex.Uprobe("runtime.chansend1", objs.RuntimeChansend1Enter, nil)
+	if err != nil {
+		return cancel, err
+	}
+	runtimeSelectnbsendEnter, err := ex.Uprobe("runtime.selectnbsend", objs.RuntimeSelectnbsendEnter, nil)
+	if err != nil {
+		return cancel, err
+	}
+	runtimeChansendEnter, err := ex.Uprobe("runtime.chansend", objs.RuntimeChansendEnter, nil)
+	if err != nil {
+		return cancel, err
+	}
 	runtimeChansend, err := ex.Uretprobe("runtime.chansend", objs.RuntimeChansend, nil)
 	if err != nil {
 		return cancel, err
 	}
+	uprobes := []link.Link{runtimeChansend1Enter, runtimeSelectnbsendEnter, runtimeChansendEnter}
 	uretprobes := []link.Link{runtimeMakechan, runtimeChansend}
 	go func() {
 		for {
@@ -61,6 +74,11 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 	}()
 	return func() {
 		// Don't use for-range to avoid copying the slice.
+		for i := 0; i < len(uprobes); i++ {
+			if err := uprobes[i].Close(); err != nil {
+				slog.Warn("Failed to close uprobe: %s", err)
+			}
+		}
 		for i := 0; i < len(uretprobes); i++ {
 			if err := uretprobes[i].Close(); err != nil {
 				slog.Warn("Failed to close uretprobe: %s", err)
@@ -133,6 +151,7 @@ func processChansendEvents(objs *bpfObjects) error {
 			slog.Int64("goroutine_id", int64(key.GoroutineId)),
 			slog.Int64("stack_id", int64(event.StackId)),
 			slog.Bool("block", event.Block),
+			slog.Uint64("context_type", uint64(event.ContextType)),
 			slog.Any("stack", stack),
 		)
 	}

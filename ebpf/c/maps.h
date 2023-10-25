@@ -38,6 +38,24 @@ struct makechan_event {
 
 BPF_HASH(makechan_events, struct makechan_event_key, struct makechan_event, 10240);
 
+typedef enum {
+    unknown = 0,
+    chansend1 = 1,
+    selectnbsend = 2
+} chansend_context_type;
+
+struct chansend_context_key {
+    int64_t goroutine_id;
+    uint64_t hchan_ptr;
+    uint64_t instruction_pointer;
+};
+
+struct chansend_context {
+    chansend_context_type type;
+};
+
+BPF_HASH(chansend_contexts, struct chansend_context_key, struct chansend_context, 10240);
+
 struct chansend_event_key {
     int64_t goroutine_id;
     uint64_t ktime; // To make this struct unique
@@ -46,6 +64,7 @@ struct chansend_event_key {
 struct chansend_event {
     int stack_id;
     bool block;
+    chansend_context_type context_type;
 };
 
 BPF_HASH(chansend_events, struct chansend_event_key, struct chansend_event, 10240);
