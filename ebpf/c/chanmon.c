@@ -7,7 +7,7 @@
 #include <bpf/bpf_tracing.h>
 
 // func makechan(t *chantype, size int) *hchan
-// https://github.com/golang/go/blob/go1.21.1/src/runtime/chan.go#L72
+// https://github.com/golang/go/blob/go1.21.3/src/runtime/chan.go#L72
 SEC("uretprobe/runtime.makechan")
 int runtime_makechan(struct pt_regs *ctx) {
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
@@ -40,7 +40,7 @@ int runtime_makechan(struct pt_regs *ctx) {
 }
 
 // func chansend(c *hchan, ep unsafe.Pointer, block bool, callerpc uintptr) bool
-// https://github.com/golang/go/blob/go1.21.1/src/runtime/chan.go#L160
+// https://github.com/golang/go/blob/go1.21.3/src/runtime/chan.go#L160
 SEC("uretprobe/runtime.chansend")
 int runtime_chansend(struct pt_regs *ctx) {
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
