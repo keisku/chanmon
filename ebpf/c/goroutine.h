@@ -57,5 +57,14 @@ static __always_inline int read_goroutine_id(struct task_struct *task, int64_t *
     }
     *goroutine_id = g.goid;
 
+    // TODO: Why is this happening? We may be able to ignore this.
+    // The Go runtime manages goroutines, and developers generally don't need to interact with
+    // goroutine IDs directly. In fact, the language specification does not provide a built-in way
+    // to obtain a goroutine's ID, as the designers of Go intended to keep goroutines abstracted
+    // away from such details.
+    if (*goroutine_id == 0) {
+        return 1;
+    }
+
     return 0;
 }

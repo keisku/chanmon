@@ -13,7 +13,6 @@ int runtime_makechan(struct pt_regs *ctx) {
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
     int64_t go_id = 0;
     if (read_goroutine_id(task, &go_id)) {
-        bpf_printk("read goroutine id failed\n");
         return 0;
     }
 
@@ -46,7 +45,6 @@ int runtime_chansend(struct pt_regs *ctx) {
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
     int64_t go_id = 0;
     if (read_goroutine_id(task, &go_id)) {
-        bpf_printk("read goroutine id failed\n");
         return 0;
     }
 
