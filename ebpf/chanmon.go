@@ -34,14 +34,15 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 	if err != nil {
 		return cancel, err
 	}
-	uretRuntimeMakechan, err := ex.Uretprobe("runtime.makechan", objs.RuntimeMakechan, nil)
+	runtimeMakechan, err := ex.Uretprobe("runtime.makechan", objs.RuntimeMakechan, nil)
 	if err != nil {
 		return cancel, err
 	}
-	uretRuntimeChansend, err := ex.Uretprobe("runtime.chansend", objs.RuntimeChansend, nil)
+	runtimeChansend, err := ex.Uretprobe("runtime.chansend", objs.RuntimeChansend, nil)
 	if err != nil {
 		return cancel, err
 	}
+	uretprobes := []link.Link{runtimeMakechan, runtimeChansend}
 	go func() {
 		for {
 			select {
@@ -59,11 +60,11 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 		}
 	}()
 	return func() {
-		if err := uretRuntimeMakechan.Close(); err != nil {
-			slog.Warn("Failed to close uretprobe: %s", err)
-		}
-		if err := uretRuntimeChansend.Close(); err != nil {
-			slog.Warn("Failed to close uretprobe: %s", err)
+		// Don't use for-range to avoid copying the slice.
+		for i := 0; i < len(uretprobes); i++ {
+			if err := uretprobes[i].Close(); err != nil {
+				slog.Warn("Failed to close uretprobe: %s", err)
+			}
 		}
 		if err := objs.Close(); err != nil {
 			slog.Warn("Failed to close bpf objects: %s", err)
