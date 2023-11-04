@@ -29,7 +29,7 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 		return cancel, err
 	}
 	if err := debuginfo.Init(binPath); err != nil {
-		return cancel, err
+		slog.Warn(fmt.Sprintf("faild to load debug info: %s", err))
 	}
 	ex, err := link.OpenExecutable(binPath)
 	if err != nil {
@@ -188,7 +188,11 @@ func extractStack(objs *bpfObjects, stackId int32) ([]string, error) {
 		if stackAddr == 0 {
 			break
 		}
-		stack[stackCounter] = debuginfo.Addr2Line(stackAddr)
+		if line := debuginfo.Addr2Line(stackAddr); line == "" {
+			stack[stackCounter] = fmt.Sprintf("%x", stackAddr)
+		} else {
+			stack[stackCounter] = line
+		}
 		stackCounter++
 	}
 	return stack[0:stackCounter], nil
