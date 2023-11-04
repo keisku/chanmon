@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/keisku/chanmon/debuginfo"
 )
@@ -34,15 +35,29 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 	if err != nil {
 		return cancel, err
 	}
-	runtimeMakechan, err := ex.Uretprobe("runtime.makechan", objs.RuntimeMakechan, nil)
-	if err != nil {
-		return cancel, err
+	type uretprobeArgs struct {
+		symbol       string
+		prog         *ebpf.Program
+		shouldCancel bool
 	}
-	runtimeChansend, err := ex.Uretprobe("runtime.chansend", objs.RuntimeChansend, nil)
-	if err != nil {
-		return cancel, err
+	uretprobeArgsSlice := []uretprobeArgs{
+		{"runtime.makechan", objs.RuntimeMakechan, true},
+		{"runtime.chansend", objs.RuntimeChansend, true},
 	}
-	uretprobes := []link.Link{runtimeMakechan, runtimeChansend}
+	uretprobeLinks := make([]link.Link, 0, len(uretprobeArgsSlice))
+	for i := 0; i < len(uretprobeArgsSlice); i++ {
+		if l, err := ex.Uretprobe(
+			uretprobeArgsSlice[i].symbol,
+			uretprobeArgsSlice[i].prog,
+			nil,
+		); err == nil {
+			uretprobeLinks = append(uretprobeLinks, l)
+		} else if uretprobeArgsSlice[i].shouldCancel {
+			return cancel, err
+		} else {
+			slog.Warn(err.Error())
+		}
+	}
 	go func() {
 		for {
 			select {
@@ -61,8 +76,8 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 	}()
 	return func() {
 		// Don't use for-range to avoid copying the slice.
-		for i := 0; i < len(uretprobes); i++ {
-			if err := uretprobes[i].Close(); err != nil {
+		for i := 0; i < len(uretprobeLinks); i++ {
+			if err := uretprobeLinks[i].Close(); err != nil {
 				slog.Warn("Failed to close uretprobe: %s", err)
 			}
 		}
