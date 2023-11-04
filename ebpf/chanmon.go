@@ -43,6 +43,8 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 	uretprobeArgsSlice := []uretprobeArgs{
 		{"runtime.makechan", objs.RuntimeMakechan, true},
 		{"runtime.chansend", objs.RuntimeChansend, true},
+		{"runtime.chanrecv1", objs.RuntimeChanrecv1, true},
+		{"runtime.chanrecv2", objs.RuntimeChanrecv2, false},
 	}
 	uretprobeLinks := make([]link.Link, 0, len(uretprobeArgsSlice))
 	for i := 0; i < len(uretprobeArgsSlice); i++ {
@@ -69,6 +71,9 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 					slog.Warn(err.Error())
 				}
 				if err := processChansendEvents(&objs); err != nil {
+					slog.Warn(err.Error())
+				}
+				if err := processChanrecvEvents(&objs); err != nil {
 					slog.Warn(err.Error())
 				}
 			}
@@ -160,6 +165,69 @@ func processChansendEvents(objs *bpfObjects) error {
 			slog.Debug("Deleted eBPF map key-values, chansend_events", slog.Int("deleted", n))
 		} else {
 			slog.Warn("Failed to delete chansend_events", slog.String("error", err.Error()))
+		}
+	}
+	deleteStackAddresses(objs, stackIdSetToDelete)
+	return nil
+}
+
+func processChanrecvEvents(objs *bpfObjects) error {
+	var key bpfChanrecvEventKey
+	var event bpfChanrecvEvent
+	var keysToDelete []bpfChanrecvEventKey
+	stackIdSetToDelete := make(map[int32]struct{})
+
+	events := objs.ChanrecvEvents.Iterate()
+	for events.Next(&key, &event) {
+		stack, err := extractStack(objs, event.StackId)
+		if err != nil {
+			slog.Warn(err.Error())
+			continue
+		}
+		if _, ok := stackIdSetToDelete[event.StackId]; !ok {
+			stackIdSetToDelete[event.StackId] = struct{}{}
+		}
+		keysToDelete = append(keysToDelete, key)
+		attrs := []any{
+			slog.Int64("goroutine_id", int64(key.GoroutineId)),
+			slog.Int64("stack_id", int64(event.StackId)),
+			slog.Any("stack", stack),
+		}
+		// As of Go version 1.21.3, there is no mechanism to access `selected` and `received`,
+		// which are the first and second return values of `runtime.chanrecv`, respectively.
+		// They are stored in the rax and rbx registers of the amd64 architecture.
+		// Upon examining the assembly code of `runtime.chanrecv` through gdb,
+		// it's evident that the return values aren't stored at the stack pointer,
+		// thereby rendering it impossible to retrieve `selected` and `received` both.
+		// See https://github.com/keisku/chanmon/pull/2
+		switch event.Function {
+		case 1:
+			attrs = append(
+				attrs,
+				slog.Bool("selected", event.Selected),
+				slog.String("function", "runtime.chanrecv1"),
+			)
+		case 2:
+			attrs = append(
+				attrs,
+				slog.Bool("received", event.Received),
+				slog.String("function", "runtime.chanrecv2"),
+			)
+		default:
+			slog.Error("unreachable")
+			continue
+		}
+		slog.Info("runtime.chanrecv", attrs...)
+	}
+	if err := events.Err(); err != nil {
+		return fmt.Errorf("failed to iterate goroutine stack ids: %w", err)
+	}
+
+	if 0 < len(keysToDelete) {
+		if n, err := objs.ChanrecvEvents.BatchDelete(keysToDelete, nil); err == nil {
+			slog.Debug("Deleted eBPF map key-values, chanrecv_events", slog.Int("deleted", n))
+		} else {
+			slog.Warn("Failed to delete chanrecv_events", slog.String("error", err.Error()))
 		}
 	}
 	deleteStackAddresses(objs, stackIdSetToDelete)

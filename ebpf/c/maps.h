@@ -50,4 +50,24 @@ struct chansend_event {
 
 BPF_HASH(chansend_events, struct chansend_event_key, struct chansend_event, 10240);
 
+typedef enum {
+    unknown = 0,
+    chanrecv1 = 1,
+    chanrecv2 = 2
+} chanrecv_function;
+
+struct chanrecv_event_key {
+    int64_t goroutine_id;
+    uint64_t ktime; // To make this struct unique
+};
+
+struct chanrecv_event {
+    int stack_id;
+    bool selected;
+    bool received;
+    chanrecv_function function;
+};
+
+BPF_HASH(chanrecv_events, struct chanrecv_event_key, struct chanrecv_event, 10240);
+
 #endif /* __MAPS_H__ */
