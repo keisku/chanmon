@@ -3,7 +3,7 @@ CFLAGS := -O2 -g -Wall -Werror $(CFLAGS)
 
 .PHONY: all format generate build
 
-all: generate format build
+all: tool-version generate format build
 
 build:
 	go mod tidy
@@ -21,3 +21,8 @@ format:
 test:
 	go vet ./...
 	go test -race -v ./...
+
+tool-version:
+	bpftool --version
+	clang --version
+	go version
