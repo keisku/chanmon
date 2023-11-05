@@ -35,33 +35,35 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 	if err != nil {
 		return cancel, err
 	}
-	type uretprobeArgs struct {
-		symbol       string
-		prog         *ebpf.Program
-		shouldCancel bool
+	type uprobeArguments struct {
+		symbol string
+		prog   *ebpf.Program
+		opts   *link.UprobeOptions
+		ret    bool
 	}
-	uretprobeArgsSlice := []uretprobeArgs{
-		{"runtime.makechan", objs.RuntimeMakechan, true},
-		{"runtime.chansend1", objs.RuntimeChansend1, true},
-		{"runtime.selectnbsend", objs.RuntimeSelectnbsend, true},
-		{"runtime.reflect_chansend", objs.RuntimeReflectChansend, false},
-		{"runtime.chanrecv1", objs.RuntimeChanrecv1, true},
-		{"runtime.chanrecv2", objs.RuntimeChanrecv2, false},
-		{"runtime.closechan", objs.RuntimeClosechan, true},
+	uprobeArgs := []uprobeArguments{
+		{"runtime.makechan", objs.RuntimeMakechan, nil, true},
+		{"runtime.chansend1", objs.RuntimeChansend1, nil, true},
+		{"runtime.selectnbsend", objs.RuntimeSelectnbsend, nil, true},
+		{"runtime.reflect_chansend", objs.RuntimeReflectChansend, nil, true},
+		{"runtime.chanrecv1", objs.RuntimeChanrecv1, nil, true},
+		{"runtime.chanrecv2", objs.RuntimeChanrecv2, nil, true},
+		{"runtime.closechan", objs.RuntimeClosechan, nil, true},
 	}
-	uretprobeLinks := make([]link.Link, 0, len(uretprobeArgsSlice))
-	for i := 0; i < len(uretprobeArgsSlice); i++ {
-		if l, err := ex.Uretprobe(
-			uretprobeArgsSlice[i].symbol,
-			uretprobeArgsSlice[i].prog,
-			nil,
-		); err == nil {
-			uretprobeLinks = append(uretprobeLinks, l)
-		} else if uretprobeArgsSlice[i].shouldCancel {
-			return cancel, err
+	uprobeLinks := make([]link.Link, 0, len(uprobeArgs))
+	for i := 0; i < len(uprobeArgs); i++ {
+		var link link.Link
+		var err error
+		if uprobeArgs[i].ret {
+			link, err = ex.Uretprobe(uprobeArgs[i].symbol, uprobeArgs[i].prog, uprobeArgs[i].opts)
 		} else {
-			slog.Debug(err.Error())
+			link, err = ex.Uprobe(uprobeArgs[i].symbol, uprobeArgs[i].prog, uprobeArgs[i].opts)
 		}
+		if err != nil {
+			slog.Debug(err.Error())
+			continue
+		}
+		uprobeLinks = append(uprobeLinks, link)
 	}
 	processes := []func(*bpfObjects) error{
 		processMakechanEvents,
@@ -88,9 +90,9 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 	}()
 	return func() {
 		// Don't use for-range to avoid copying the slice.
-		for i := 0; i < len(uretprobeLinks); i++ {
-			if err := uretprobeLinks[i].Close(); err != nil {
-				slog.Warn("Failed to close uretprobe: %s", err)
+		for i := 0; i < len(uprobeLinks); i++ {
+			if err := uprobeLinks[i].Close(); err != nil {
+				slog.Warn(err.Error())
 			}
 		}
 		if err := objs.Close(); err != nil {
