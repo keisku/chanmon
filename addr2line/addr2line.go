@@ -10,7 +10,6 @@ import (
 )
 
 // TODO: Enable this to be used with binaries that are compiled again during runtime.
-// Reference code: https://github.com/golang/go/blob/go1.21.3/src/debug/dwarf/line_test.go#L181-L255
 
 var once sync.Once
 var lineEntries sync.Map
@@ -67,6 +66,7 @@ func Init(binPath string) error {
 		}
 
 		// If elf file doesn't contain `.gopclntab`, fallback to DWARF.
+		// Reference code: https://github.com/golang/go/blob/go1.21.3/src/debug/dwarf/line_test.go#L181-L255
 		d, err := f.DWARF()
 		if err != nil {
 			initErr = fmt.Errorf("failed to read DWARF: %w", err)
