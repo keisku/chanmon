@@ -13,8 +13,26 @@ import (
 // Reference code: https://github.com/golang/go/blob/go1.21.3/src/debug/dwarf/line_test.go#L181-L255
 
 var once sync.Once
-var symbols *gosym.Table
 var lineEntries sync.Map
+var syms symbols
+
+type symbols struct {
+	mu sync.Mutex
+	s  *gosym.Table
+}
+
+func (syms *symbols) pcToLine(addr uint64) string {
+	syms.mu.Lock()
+	defer syms.mu.Unlock()
+	if syms.s == nil {
+		return ""
+	}
+	file, line, f := syms.s.PCToLine(addr)
+	if f == nil {
+		return ""
+	}
+	return fmt.Sprintf("%s:%d", file, line)
+}
 
 // Init loads the debug info from the specified binary file and parsing its symbol and line number information.
 // This function is intended to be called once, with future calls being no-ops.
@@ -35,10 +53,13 @@ func Init(binPath string) error {
 				return
 			}
 			lineTable := gosym.NewLineTable(lineTableData, f.Section(".text").Addr)
-			symbols, err = gosym.NewTable(nil, lineTable)
+			s, err := gosym.NewTable(nil, lineTable)
 			if err != nil {
 				initErr = fmt.Errorf("failed to parse symbols: %w", err)
 				return
+			}
+			syms = symbols{
+				s: s,
 			}
 			// If symbols are successfully loaded from `.gopclntab`, skip loading DWARF.
 			// `.gopclntab` has enough information.
@@ -92,11 +113,8 @@ func Init(binPath string) error {
 // If the symbols table is initialized from .gopclntab, it uses that for the conversion;
 // otherwise, it falls back to using the DWARF.
 func Do(addr uint64) string {
-	if symbols != nil {
-		fileName, line, f := symbols.PCToLine(addr)
-		if f != nil {
-			return fmt.Sprintf("%s:%d", fileName, line)
-		}
+	if s := syms.pcToLine(addr); s != "" {
+		return s
 	}
 	if line, ok := lineEntries.Load(addr); ok {
 		if s, ok := line.(string); ok {
