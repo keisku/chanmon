@@ -137,4 +137,31 @@ int runtime_chanrecv2(struct pt_regs *ctx) {
     return 0;
 }
 
+// func closechan(c *hchan)
+// https://github.com/golang/go/blob/go1.21.3/src/runtime/chan.go#L357
+SEC("uretprobe/runtime.closechan")
+int runtime_closechan(struct pt_regs *ctx) {
+    struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+    int64_t go_id = 0;
+    if (read_goroutine_id(task, &go_id)) {
+        return 0;
+    }
+
+    int stack_id = bpf_get_stackid(ctx, &stack_addresses, BPF_F_USER_STACK);
+    if (stack_id < 0) {
+        bpf_printk("get stack id failed\n");
+        return 0;
+    }
+
+    struct closechan_event_key key = {
+        .goroutine_id = go_id,
+        .ktime = bpf_ktime_get_ns(),
+    };
+    struct closechan_event event = {
+        .stack_id = stack_id,
+    };
+    bpf_map_update_elem(&closechan_events, &key, &event, BPF_ANY);
+    return 0;
+}
+
 char LICENSE[] SEC("license") = "GPL";

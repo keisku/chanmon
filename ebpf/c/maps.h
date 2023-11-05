@@ -70,4 +70,15 @@ struct chanrecv_event {
 
 BPF_HASH(chanrecv_events, struct chanrecv_event_key, struct chanrecv_event, 10240);
 
+struct closechan_event_key {
+    int64_t goroutine_id;
+    uint64_t ktime; // To make this struct unique
+};
+
+struct closechan_event {
+    int stack_id;
+};
+
+BPF_HASH(closechan_events, struct closechan_event_key, struct closechan_event, 10240);
+
 #endif /* __MAPS_H__ */

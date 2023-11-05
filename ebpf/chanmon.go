@@ -45,6 +45,7 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 		{"runtime.chansend", objs.RuntimeChansend, true},
 		{"runtime.chanrecv1", objs.RuntimeChanrecv1, true},
 		{"runtime.chanrecv2", objs.RuntimeChanrecv2, false},
+		{"runtime.closechan", objs.RuntimeClosechan, true},
 	}
 	uretprobeLinks := make([]link.Link, 0, len(uretprobeArgsSlice))
 	for i := 0; i < len(uretprobeArgsSlice); i++ {
@@ -74,6 +75,9 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 					slog.Warn(err.Error())
 				}
 				if err := processChanrecvEvents(&objs); err != nil {
+					slog.Warn(err.Error())
+				}
+				if err := processClosechanEvents(&objs); err != nil {
 					slog.Warn(err.Error())
 				}
 			}
@@ -228,6 +232,44 @@ func processChanrecvEvents(objs *bpfObjects) error {
 			slog.Debug("Deleted eBPF map key-values, chanrecv_events", slog.Int("deleted", n))
 		} else {
 			slog.Warn("Failed to delete chanrecv_events", slog.String("error", err.Error()))
+		}
+	}
+	deleteStackAddresses(objs, stackIdSetToDelete)
+	return nil
+}
+
+func processClosechanEvents(objs *bpfObjects) error {
+	var key bpfClosechanEventKey
+	var event bpfClosechanEvent
+	var keysToDelete []bpfClosechanEventKey
+	stackIdSetToDelete := make(map[int32]struct{})
+
+	events := objs.ClosechanEvents.Iterate()
+	for events.Next(&key, &event) {
+		stack, err := extractStack(objs, event.StackId)
+		if err != nil {
+			slog.Warn(err.Error())
+			continue
+		}
+		if _, ok := stackIdSetToDelete[event.StackId]; !ok {
+			stackIdSetToDelete[event.StackId] = struct{}{}
+		}
+		keysToDelete = append(keysToDelete, key)
+		slog.Info("runtime.closechan",
+			slog.Int64("goroutine_id", int64(key.GoroutineId)),
+			slog.Int64("stack_id", int64(event.StackId)),
+			slog.Any("stack", stack),
+		)
+	}
+	if err := events.Err(); err != nil {
+		return fmt.Errorf("failed to iterate goroutine stack ids: %w", err)
+	}
+
+	if 0 < len(keysToDelete) {
+		if n, err := objs.ClosechanEvents.BatchDelete(keysToDelete, nil); err == nil {
+			slog.Debug("Deleted eBPF map key-values, closechan_events", slog.Int("deleted", n))
+		} else {
+			slog.Warn("Failed to delete closechan_events", slog.String("error", err.Error()))
 		}
 	}
 	deleteStackAddresses(objs, stackIdSetToDelete)

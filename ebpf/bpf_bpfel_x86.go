@@ -36,6 +36,13 @@ type bpfChansendEventKey struct {
 	Ktime       uint64
 }
 
+type bpfClosechanEvent struct{ StackId int32 }
+
+type bpfClosechanEventKey struct {
+	GoroutineId int64
+	Ktime       uint64
+}
+
 type bpfMakechanEvent struct {
 	StackId  int32
 	ChanSize int32
@@ -92,6 +99,7 @@ type bpfProgramSpecs struct {
 	RuntimeChanrecv1 *ebpf.ProgramSpec `ebpf:"runtime_chanrecv1"`
 	RuntimeChanrecv2 *ebpf.ProgramSpec `ebpf:"runtime_chanrecv2"`
 	RuntimeChansend  *ebpf.ProgramSpec `ebpf:"runtime_chansend"`
+	RuntimeClosechan *ebpf.ProgramSpec `ebpf:"runtime_closechan"`
 	RuntimeMakechan  *ebpf.ProgramSpec `ebpf:"runtime_makechan"`
 }
 
@@ -99,10 +107,11 @@ type bpfProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfMapSpecs struct {
-	ChanrecvEvents *ebpf.MapSpec `ebpf:"chanrecv_events"`
-	ChansendEvents *ebpf.MapSpec `ebpf:"chansend_events"`
-	MakechanEvents *ebpf.MapSpec `ebpf:"makechan_events"`
-	StackAddresses *ebpf.MapSpec `ebpf:"stack_addresses"`
+	ChanrecvEvents  *ebpf.MapSpec `ebpf:"chanrecv_events"`
+	ChansendEvents  *ebpf.MapSpec `ebpf:"chansend_events"`
+	ClosechanEvents *ebpf.MapSpec `ebpf:"closechan_events"`
+	MakechanEvents  *ebpf.MapSpec `ebpf:"makechan_events"`
+	StackAddresses  *ebpf.MapSpec `ebpf:"stack_addresses"`
 }
 
 // bpfObjects contains all objects after they have been loaded into the kernel.
@@ -124,16 +133,18 @@ func (o *bpfObjects) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfMaps struct {
-	ChanrecvEvents *ebpf.Map `ebpf:"chanrecv_events"`
-	ChansendEvents *ebpf.Map `ebpf:"chansend_events"`
-	MakechanEvents *ebpf.Map `ebpf:"makechan_events"`
-	StackAddresses *ebpf.Map `ebpf:"stack_addresses"`
+	ChanrecvEvents  *ebpf.Map `ebpf:"chanrecv_events"`
+	ChansendEvents  *ebpf.Map `ebpf:"chansend_events"`
+	ClosechanEvents *ebpf.Map `ebpf:"closechan_events"`
+	MakechanEvents  *ebpf.Map `ebpf:"makechan_events"`
+	StackAddresses  *ebpf.Map `ebpf:"stack_addresses"`
 }
 
 func (m *bpfMaps) Close() error {
 	return _BpfClose(
 		m.ChanrecvEvents,
 		m.ChansendEvents,
+		m.ClosechanEvents,
 		m.MakechanEvents,
 		m.StackAddresses,
 	)
@@ -146,6 +157,7 @@ type bpfPrograms struct {
 	RuntimeChanrecv1 *ebpf.Program `ebpf:"runtime_chanrecv1"`
 	RuntimeChanrecv2 *ebpf.Program `ebpf:"runtime_chanrecv2"`
 	RuntimeChansend  *ebpf.Program `ebpf:"runtime_chansend"`
+	RuntimeClosechan *ebpf.Program `ebpf:"runtime_closechan"`
 	RuntimeMakechan  *ebpf.Program `ebpf:"runtime_makechan"`
 }
 
@@ -154,6 +166,7 @@ func (p *bpfPrograms) Close() error {
 		p.RuntimeChanrecv1,
 		p.RuntimeChanrecv2,
 		p.RuntimeChansend,
+		p.RuntimeClosechan,
 		p.RuntimeMakechan,
 	)
 }
