@@ -10,7 +10,7 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
-	"github.com/keisku/chanmon/debuginfo"
+	"github.com/keisku/chanmon/addr2line"
 )
 
 // $BPF_CLANG and $BPF_CFLAGS are set by the Makefile.
@@ -28,8 +28,8 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 	if err := loadBpfObjects(&objs, nil); err != nil {
 		return cancel, err
 	}
-	if err := debuginfo.Init(binPath); err != nil {
-		slog.Warn(fmt.Sprintf("faild to load debug info: %s", err))
+	if err := addr2line.Init(binPath); err != nil {
+		slog.Warn(fmt.Sprintf("faild to initialize addr2line: %s", err))
 	}
 	ex, err := link.OpenExecutable(binPath)
 	if err != nil {
@@ -315,7 +315,7 @@ func extractStack(objs *bpfObjects, stackId int32) ([]string, error) {
 		if stackAddr == 0 {
 			break
 		}
-		if line := debuginfo.Addr2Line(stackAddr); line == "" {
+		if line := addr2line.Do(stackAddr); line == "" {
 			stack[stackCounter] = fmt.Sprintf("%x", stackAddr)
 		} else {
 			stack[stackCounter] = line
