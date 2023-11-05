@@ -6,6 +6,7 @@ import (
 	"debug/gosym"
 	"fmt"
 	"io"
+	"log/slog"
 	"sync"
 )
 
@@ -62,10 +63,11 @@ func Init(binPath string) error {
 			}
 			// If symbols are successfully loaded from `.gopclntab`, skip loading DWARF.
 			// `.gopclntab` has enough information.
+			slog.Info("load symbols from .gopclntab")
 			return
 		}
 
-		// If elf file doesn't contain `.gopclntab`, fallback to DWARF.
+		// Fallback to DWARF when loading `.gopclntab` fails.
 		// Reference code: https://github.com/golang/go/blob/go1.21.3/src/debug/dwarf/line_test.go#L181-L255
 		d, err := f.DWARF()
 		if err != nil {
@@ -104,6 +106,7 @@ func Init(binPath string) error {
 				}
 			}
 		}
+		slog.Info("load symbols from DWARF")
 	})
 	return initErr
 }
