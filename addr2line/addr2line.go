@@ -67,7 +67,7 @@ func Init(binPath string) error {
 			}
 			// If symbols are successfully loaded from `.gopclntab`, skip loading DWARF.
 			// `.gopclntab` has enough information.
-			slog.Info("load symbols from .gopclntab")
+			slog.Debug("load symbols from .gopclntab")
 			return
 		}
 
@@ -110,7 +110,7 @@ func Init(binPath string) error {
 				}
 			}
 		}
-		slog.Info("load symbols from DWARF")
+		slog.Debug("load symbols from DWARF")
 	})
 	return initErr
 }

@@ -40,9 +40,9 @@ func main() {
 	if err != nil {
 		errlog.Fatalln(err)
 	}
-	slog.Info("eBPF program running")
+	slog.Debug("eBPF program starts")
 
 	<-ctx.Done()
-	slog.Info("chanmon exiting")
+	slog.Debug("exit...")
 	eBPFClose()
 }

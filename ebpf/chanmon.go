@@ -73,7 +73,7 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 		for {
 			select {
 			case <-wrappedCtx.Done():
-				slog.Info("Closing uprobe")
+				slog.Debug("eBPF programs stop")
 				return
 			case <-time.Tick(200 * time.Millisecond):
 				for i := 0; i < len(processes); i++ {
