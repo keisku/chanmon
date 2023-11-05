@@ -60,7 +60,7 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 		} else if uretprobeArgsSlice[i].shouldCancel {
 			return cancel, err
 		} else {
-			slog.Warn(err.Error())
+			slog.Debug(err.Error())
 		}
 	}
 	processes := []func(*bpfObjects) error{
