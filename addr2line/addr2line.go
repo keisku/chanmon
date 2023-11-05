@@ -31,7 +31,11 @@ func (syms *symbols) pcToLine(addr uint64) string {
 	if f == nil {
 		return ""
 	}
-	return fmt.Sprintf("%s:%d", file, line)
+	if f.Func == nil {
+		return fmt.Sprintf("%s:%d", file, line)
+	} else {
+		return fmt.Sprintf("%s at %s:%d", f.Func.Name, file, line)
+	}
 }
 
 // Init loads the debug info from the specified binary file and parsing its symbol and line number information.
