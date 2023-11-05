@@ -42,7 +42,9 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 	}
 	uretprobeArgsSlice := []uretprobeArgs{
 		{"runtime.makechan", objs.RuntimeMakechan, true},
-		{"runtime.chansend", objs.RuntimeChansend, true},
+		{"runtime.chansend1", objs.RuntimeChansend1, true},
+		{"runtime.selectnbsend", objs.RuntimeSelectnbsend, true},
+		{"runtime.reflect_chansend", objs.RuntimeReflectChansend, false},
 		{"runtime.chanrecv1", objs.RuntimeChanrecv1, true},
 		{"runtime.chanrecv2", objs.RuntimeChanrecv2, false},
 		{"runtime.closechan", objs.RuntimeClosechan, true},
@@ -136,6 +138,15 @@ func processMakechanEvents(objs *bpfObjects) error {
 	return nil
 }
 
+func translateChansendFunction(chansendFunction uint32) string {
+	return [...]string{
+		"unknown",
+		"runtime.chansend1",
+		"runtime.selectnbsend",
+		"runtime.reflect_chansend",
+	}[chansendFunction]
+}
+
 func processChansendEvents(objs *bpfObjects) error {
 	var key bpfChansendEventKey
 	var event bpfChansendEvent
@@ -144,6 +155,10 @@ func processChansendEvents(objs *bpfObjects) error {
 
 	events := objs.ChansendEvents.Iterate()
 	for events.Next(&key, &event) {
+		if translateChansendFunction(event.Function) == "unknown" {
+			slog.Error("unreachable")
+			continue
+		}
 		stack, err := extractStack(objs, event.StackId)
 		if err != nil {
 			slog.Warn(err.Error())
@@ -156,7 +171,8 @@ func processChansendEvents(objs *bpfObjects) error {
 		slog.Info("runtime.chansend",
 			slog.Int64("goroutine_id", int64(key.GoroutineId)),
 			slog.Int64("stack_id", int64(event.StackId)),
-			slog.Bool("block", event.Block),
+			slog.Bool("success", event.Success),
+			slog.String("function", translateChansendFunction(event.Function)),
 			slog.Any("stack", stack),
 		)
 	}

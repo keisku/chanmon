@@ -26,9 +26,10 @@ type bpfChanrecvEventKey struct {
 }
 
 type bpfChansendEvent struct {
-	StackId int32
-	Block   bool
-	_       [3]byte
+	StackId  int32
+	Success  bool
+	_        [3]byte
+	Function uint32
 }
 
 type bpfChansendEventKey struct {
@@ -96,11 +97,13 @@ type bpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfProgramSpecs struct {
-	RuntimeChanrecv1 *ebpf.ProgramSpec `ebpf:"runtime_chanrecv1"`
-	RuntimeChanrecv2 *ebpf.ProgramSpec `ebpf:"runtime_chanrecv2"`
-	RuntimeChansend  *ebpf.ProgramSpec `ebpf:"runtime_chansend"`
-	RuntimeClosechan *ebpf.ProgramSpec `ebpf:"runtime_closechan"`
-	RuntimeMakechan  *ebpf.ProgramSpec `ebpf:"runtime_makechan"`
+	RuntimeChanrecv1       *ebpf.ProgramSpec `ebpf:"runtime_chanrecv1"`
+	RuntimeChanrecv2       *ebpf.ProgramSpec `ebpf:"runtime_chanrecv2"`
+	RuntimeChansend1       *ebpf.ProgramSpec `ebpf:"runtime_chansend1"`
+	RuntimeClosechan       *ebpf.ProgramSpec `ebpf:"runtime_closechan"`
+	RuntimeMakechan        *ebpf.ProgramSpec `ebpf:"runtime_makechan"`
+	RuntimeReflectChansend *ebpf.ProgramSpec `ebpf:"runtime_reflect_chansend"`
+	RuntimeSelectnbsend    *ebpf.ProgramSpec `ebpf:"runtime_selectnbsend"`
 }
 
 // bpfMapSpecs contains maps before they are loaded into the kernel.
@@ -154,20 +157,24 @@ func (m *bpfMaps) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfPrograms struct {
-	RuntimeChanrecv1 *ebpf.Program `ebpf:"runtime_chanrecv1"`
-	RuntimeChanrecv2 *ebpf.Program `ebpf:"runtime_chanrecv2"`
-	RuntimeChansend  *ebpf.Program `ebpf:"runtime_chansend"`
-	RuntimeClosechan *ebpf.Program `ebpf:"runtime_closechan"`
-	RuntimeMakechan  *ebpf.Program `ebpf:"runtime_makechan"`
+	RuntimeChanrecv1       *ebpf.Program `ebpf:"runtime_chanrecv1"`
+	RuntimeChanrecv2       *ebpf.Program `ebpf:"runtime_chanrecv2"`
+	RuntimeChansend1       *ebpf.Program `ebpf:"runtime_chansend1"`
+	RuntimeClosechan       *ebpf.Program `ebpf:"runtime_closechan"`
+	RuntimeMakechan        *ebpf.Program `ebpf:"runtime_makechan"`
+	RuntimeReflectChansend *ebpf.Program `ebpf:"runtime_reflect_chansend"`
+	RuntimeSelectnbsend    *ebpf.Program `ebpf:"runtime_selectnbsend"`
 }
 
 func (p *bpfPrograms) Close() error {
 	return _BpfClose(
 		p.RuntimeChanrecv1,
 		p.RuntimeChanrecv2,
-		p.RuntimeChansend,
+		p.RuntimeChansend1,
 		p.RuntimeClosechan,
 		p.RuntimeMakechan,
+		p.RuntimeReflectChansend,
+		p.RuntimeSelectnbsend,
 	)
 }
 

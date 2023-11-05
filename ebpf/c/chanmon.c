@@ -49,10 +49,12 @@ int runtime_makechan(struct pt_regs *ctx) {
     return 0;
 }
 
-// func chansend(c *hchan, ep unsafe.Pointer, block bool, callerpc uintptr) bool
-// https://github.com/golang/go/blob/go1.21.3/src/runtime/chan.go#L160
-SEC("uretprobe/runtime.chansend")
-int runtime_chansend(struct pt_regs *ctx) {
+// func chansend1(c *hchan, elem unsafe.Pointer) {
+// 	chansend(c, elem, true, getcallerpc())
+// }
+// https://github.com/golang/go/blob/go1.21.3/src/runtime/chan.go#L144
+SEC("uretprobe/runtime.chansend1")
+int runtime_chansend1(struct pt_regs *ctx) {
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
     int64_t go_id = 0;
     if (read_goroutine_id(task, &go_id)) {
@@ -64,7 +66,35 @@ int runtime_chansend(struct pt_regs *ctx) {
         return 0;
     }
 
-    bool block = PT_REGS_RC_CORE(ctx);
+    struct chansend_event_key key = {
+        .goroutine_id = go_id,
+        .ktime = bpf_ktime_get_ns(),
+    };
+    struct chansend_event event = {
+        .stack_id = stack_id,
+        .success = (bool)PT_REGS_RC_CORE(ctx),
+        .function = chansend1,
+    };
+    bpf_map_update_elem(&chansend_events, &key, &event, BPF_ANY);
+    return 0;
+}
+
+// func selectnbsend(c *hchan, elem unsafe.Pointer) (selected bool) {
+// 	return chansend(c, elem, false, getcallerpc())
+// }
+// https://github.com/golang/go/blob/go1.21.3/src/runtime/chan.go#L693
+SEC("uretprobe/runtime.selectnbsend")
+int runtime_selectnbsend(struct pt_regs *ctx) {
+    struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+    int64_t go_id = 0;
+    if (read_goroutine_id(task, &go_id)) {
+        return 0;
+    }
+
+    int stack_id = 0;
+    if (read_stack_id(ctx, &stack_id)) {
+        return 0;
+    }
 
     struct chansend_event_key key = {
         .goroutine_id = go_id,
@@ -72,7 +102,38 @@ int runtime_chansend(struct pt_regs *ctx) {
     };
     struct chansend_event event = {
         .stack_id = stack_id,
-        .block = block,
+        .success = (bool)PT_REGS_RC_CORE(ctx),
+        .function = selectnbsend,
+    };
+    bpf_map_update_elem(&chansend_events, &key, &event, BPF_ANY);
+    return 0;
+}
+
+// func reflect_chansend(c *hchan, elem unsafe.Pointer, nb bool) (selected bool) {
+// 	return chansend(c, elem, !nb, getcallerpc())
+// }
+// https://github.com/golang/go/blob/go1.21.3/src/runtime/chan.go#L718
+SEC("uretprobe/runtime.reflect_chansend")
+int runtime_reflect_chansend(struct pt_regs *ctx) {
+    struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+    int64_t go_id = 0;
+    if (read_goroutine_id(task, &go_id)) {
+        return 0;
+    }
+
+    int stack_id = 0;
+    if (read_stack_id(ctx, &stack_id)) {
+        return 0;
+    }
+
+    struct chansend_event_key key = {
+        .goroutine_id = go_id,
+        .ktime = bpf_ktime_get_ns(),
+    };
+    struct chansend_event event = {
+        .stack_id = stack_id,
+        .success = (bool)PT_REGS_RC_CORE(ctx),
+        .function = reflect_chansend,
     };
     bpf_map_update_elem(&chansend_events, &key, &event, BPF_ANY);
     return 0;
