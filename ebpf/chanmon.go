@@ -63,6 +63,12 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 			slog.Warn(err.Error())
 		}
 	}
+	processes := []func(*bpfObjects) error{
+		processMakechanEvents,
+		processChansendEvents,
+		processChanrecvEvents,
+		processClosechanEvents,
+	}
 	go func() {
 		for {
 			select {
@@ -70,17 +76,12 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 				slog.Info("Closing uprobe")
 				return
 			case <-time.Tick(200 * time.Millisecond):
-				if err := processMakechanEvents(&objs); err != nil {
-					slog.Warn(err.Error())
-				}
-				if err := processChansendEvents(&objs); err != nil {
-					slog.Warn(err.Error())
-				}
-				if err := processChanrecvEvents(&objs); err != nil {
-					slog.Warn(err.Error())
-				}
-				if err := processClosechanEvents(&objs); err != nil {
-					slog.Warn(err.Error())
+				for i := 0; i < len(processes); i++ {
+					go func(fIdx int) {
+						if err := processes[fIdx](&objs); err != nil {
+							slog.Warn(err.Error())
+						}
+					}(i)
 				}
 			}
 		}
@@ -101,205 +102,182 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 
 func processMakechanEvents(objs *bpfObjects) error {
 	var key bpfMakechanEventKey
-	var event bpfMakechanEvent
+	var value bpfMakechanEvent
 	var keysToDelete []bpfMakechanEventKey
-	stackIdSetToDelete := make(map[int32]struct{})
-
-	events := objs.MakechanEvents.Iterate()
-	for events.Next(&key, &event) {
-		stack, err := extractStack(objs, event.StackId)
-		if err != nil {
-			slog.Warn(err.Error())
-			continue
-		}
-		if _, ok := stackIdSetToDelete[event.StackId]; !ok {
-			stackIdSetToDelete[event.StackId] = struct{}{}
-		}
-		keysToDelete = append(keysToDelete, key)
-		slog.Info("runtime.makechan",
-			slog.Int64("goroutine_id", int64(key.GoroutineId)),
-			slog.Int64("stack_id", int64(event.StackId)),
-			slog.Int64("chan_size", int64(event.ChanSize)),
-			slog.Any("stack", stack),
-		)
-	}
-	if err := events.Err(); err != nil {
-		return fmt.Errorf("failed to iterate goroutine stack ids: %w", err)
-	}
-
-	if 0 < len(keysToDelete) {
-		if n, err := objs.MakechanEvents.BatchDelete(keysToDelete, nil); err == nil {
-			slog.Debug("Deleted eBPF map key-values, makechan_events", slog.Int("deleted", n))
-		} else {
-			slog.Warn("Failed to delete makechan_events", slog.String("error", err.Error()))
-		}
-	}
-	deleteStackAddresses(objs, stackIdSetToDelete)
-	return nil
-}
-
-func translateChansendFunction(chansendFunction uint32) string {
-	return [...]string{
-		"unknown",
-		"runtime.chansend1",
-		"runtime.selectnbsend",
-		"runtime.reflect_chansend",
-	}[chansendFunction]
+	return processEvents(
+		objs.StackAddresses,
+		objs.MakechanEvents,
+		func(mapIter *ebpf.MapIterator, stackIdSet map[int32]struct{}) (any, int) {
+			for mapIter.Next(&key, &value) {
+				stack, err := extractStack(objs, value.StackId)
+				if err != nil {
+					slog.Warn(err.Error())
+					continue
+				}
+				stackIdSet[value.StackId] = struct{}{}
+				keysToDelete = append(keysToDelete, key)
+				slog.Info("runtime.makechan",
+					slog.Int64("goroutine_id", int64(key.GoroutineId)),
+					slog.Int64("stack_id", int64(value.StackId)),
+					slog.Int64("chan_size", int64(value.ChanSize)),
+					slog.Any("stack", stack),
+				)
+			}
+			return keysToDelete, len(keysToDelete)
+		},
+	)
 }
 
 func processChansendEvents(objs *bpfObjects) error {
 	var key bpfChansendEventKey
-	var event bpfChansendEvent
+	var value bpfChansendEvent
 	var keysToDelete []bpfChansendEventKey
-	stackIdSetToDelete := make(map[int32]struct{})
-
-	events := objs.ChansendEvents.Iterate()
-	for events.Next(&key, &event) {
-		if translateChansendFunction(event.Function) == "unknown" {
-			slog.Error("unreachable")
-			continue
-		}
-		stack, err := extractStack(objs, event.StackId)
-		if err != nil {
-			slog.Warn(err.Error())
-			continue
-		}
-		if _, ok := stackIdSetToDelete[event.StackId]; !ok {
-			stackIdSetToDelete[event.StackId] = struct{}{}
-		}
-		keysToDelete = append(keysToDelete, key)
-		slog.Info("runtime.chansend",
-			slog.Int64("goroutine_id", int64(key.GoroutineId)),
-			slog.Int64("stack_id", int64(event.StackId)),
-			slog.Bool("success", event.Success),
-			slog.String("function", translateChansendFunction(event.Function)),
-			slog.Any("stack", stack),
-		)
+	translation := [...]string{
+		"unknown",
+		"runtime.chansend1",
+		"runtime.selectnbsend",
+		"runtime.reflect_chansend",
 	}
-	if err := events.Err(); err != nil {
-		return fmt.Errorf("failed to iterate goroutine stack ids: %w", err)
-	}
-
-	if 0 < len(keysToDelete) {
-		if n, err := objs.ChansendEvents.BatchDelete(keysToDelete, nil); err == nil {
-			slog.Debug("Deleted eBPF map key-values, chansend_events", slog.Int("deleted", n))
-		} else {
-			slog.Warn("Failed to delete chansend_events", slog.String("error", err.Error()))
-		}
-	}
-	deleteStackAddresses(objs, stackIdSetToDelete)
-	return nil
+	return processEvents(
+		objs.StackAddresses,
+		objs.ChansendEvents,
+		func(mapIter *ebpf.MapIterator, stackIdSet map[int32]struct{}) (any, int) {
+			for mapIter.Next(&key, &value) {
+				if value.Function == 0 { // unknown
+					slog.Error("unreachable")
+					continue
+				}
+				stack, err := extractStack(objs, value.StackId)
+				if err != nil {
+					slog.Warn(err.Error())
+					continue
+				}
+				stackIdSet[value.StackId] = struct{}{}
+				keysToDelete = append(keysToDelete, key)
+				slog.Info("runtime.chansend",
+					slog.Int64("goroutine_id", int64(key.GoroutineId)),
+					slog.Int64("stack_id", int64(value.StackId)),
+					slog.Bool("success", value.Success),
+					slog.String("function", translation[value.Function]),
+					slog.Any("stack", stack),
+				)
+			}
+			return keysToDelete, len(keysToDelete)
+		},
+	)
 }
 
 func processChanrecvEvents(objs *bpfObjects) error {
 	var key bpfChanrecvEventKey
-	var event bpfChanrecvEvent
+	var value bpfChanrecvEvent
 	var keysToDelete []bpfChanrecvEventKey
-	stackIdSetToDelete := make(map[int32]struct{})
-
-	events := objs.ChanrecvEvents.Iterate()
-	for events.Next(&key, &event) {
-		if event.Function == 0 { // unknown
-			slog.Error("unreachable")
-			continue
-		}
-		stack, err := extractStack(objs, event.StackId)
-		if err != nil {
-			slog.Warn(err.Error())
-			continue
-		}
-		if _, ok := stackIdSetToDelete[event.StackId]; !ok {
-			stackIdSetToDelete[event.StackId] = struct{}{}
-		}
-		keysToDelete = append(keysToDelete, key)
-		attrs := []any{
-			slog.Int64("goroutine_id", int64(key.GoroutineId)),
-			slog.Int64("stack_id", int64(event.StackId)),
-			slog.Any("stack", stack),
-		}
-		// As of Go version 1.21.3, there is no mechanism to access `selected` and `received`,
-		// which are the first and second return values of `runtime.chanrecv`, respectively.
-		// They are stored in the rax and rbx registers of the amd64 architecture.
-		// Upon examining the assembly code of `runtime.chanrecv` through gdb,
-		// it's evident that the return values aren't stored at the stack pointer,
-		// thereby rendering it impossible to retrieve `selected` and `received` both.
-		// See https://github.com/keisku/chanmon/pull/2
-		switch event.Function {
-		case 1:
-			attrs = append(
-				attrs,
-				slog.Bool("selected", event.Selected),
-				slog.String("function", "runtime.chanrecv1"),
-			)
-		case 2:
-			attrs = append(
-				attrs,
-				slog.Bool("received", event.Received),
-				slog.String("function", "runtime.chanrecv2"),
-			)
-		}
-		slog.Info("runtime.chanrecv", attrs...)
-	}
-	if err := events.Err(); err != nil {
-		return fmt.Errorf("failed to iterate goroutine stack ids: %w", err)
-	}
-
-	if 0 < len(keysToDelete) {
-		if n, err := objs.ChanrecvEvents.BatchDelete(keysToDelete, nil); err == nil {
-			slog.Debug("Deleted eBPF map key-values, chanrecv_events", slog.Int("deleted", n))
-		} else {
-			slog.Warn("Failed to delete chanrecv_events", slog.String("error", err.Error()))
-		}
-	}
-	deleteStackAddresses(objs, stackIdSetToDelete)
-	return nil
+	return processEvents(
+		objs.StackAddresses,
+		objs.ChanrecvEvents,
+		func(mapIter *ebpf.MapIterator, stackIdSet map[int32]struct{}) (any, int) {
+			for mapIter.Next(&key, &value) {
+				if value.Function == 0 { // unknown
+					slog.Error("unreachable")
+					continue
+				}
+				stack, err := extractStack(objs, value.StackId)
+				if err != nil {
+					slog.Warn(err.Error())
+					continue
+				}
+				stackIdSet[value.StackId] = struct{}{}
+				keysToDelete = append(keysToDelete, key)
+				attrs := []any{
+					slog.Int64("goroutine_id", int64(key.GoroutineId)),
+					slog.Int64("stack_id", int64(value.StackId)),
+					slog.Any("stack", stack),
+				}
+				// As of Go version 1.21.3, there is no mechanism to access `selected` and `received`,
+				// which are the first and second return values of `runtime.chanrecv`, respectively.
+				// They are stored in the rax and rbx registers of the amd64 architecture.
+				// Upon examining the assembly code of `runtime.chanrecv` through gdb,
+				// it's evident that the return values aren't stored at the stack pointer,
+				// thereby rendering it impossible to retrieve `selected` and `received` both.
+				// See https://github.com/keisku/chanmon/pull/2
+				switch value.Function {
+				case 1:
+					attrs = append(
+						attrs,
+						slog.Bool("selected", value.Selected),
+						slog.String("function", "runtime.chanrecv1"),
+					)
+				case 2:
+					attrs = append(
+						attrs,
+						slog.Bool("received", value.Received),
+						slog.String("function", "runtime.chanrecv2"),
+					)
+				}
+				slog.Info("runtime.chanrecv", attrs...)
+			}
+			return keysToDelete, len(keysToDelete)
+		},
+	)
 }
 
 func processClosechanEvents(objs *bpfObjects) error {
 	var key bpfClosechanEventKey
-	var event bpfClosechanEvent
+	var value bpfClosechanEvent
 	var keysToDelete []bpfClosechanEventKey
-	stackIdSetToDelete := make(map[int32]struct{})
 
-	events := objs.ClosechanEvents.Iterate()
-	for events.Next(&key, &event) {
-		stack, err := extractStack(objs, event.StackId)
-		if err != nil {
-			slog.Warn(err.Error())
-			continue
-		}
-		if _, ok := stackIdSetToDelete[event.StackId]; !ok {
-			stackIdSetToDelete[event.StackId] = struct{}{}
-		}
-		keysToDelete = append(keysToDelete, key)
-		slog.Info("runtime.closechan",
-			slog.Int64("goroutine_id", int64(key.GoroutineId)),
-			slog.Int64("stack_id", int64(event.StackId)),
-			slog.Any("stack", stack),
-		)
-	}
-	if err := events.Err(); err != nil {
-		return fmt.Errorf("failed to iterate goroutine stack ids: %w", err)
-	}
-
-	if 0 < len(keysToDelete) {
-		if n, err := objs.ClosechanEvents.BatchDelete(keysToDelete, nil); err == nil {
-			slog.Debug("Deleted eBPF map key-values, closechan_events", slog.Int("deleted", n))
-		} else {
-			slog.Warn("Failed to delete closechan_events", slog.String("error", err.Error()))
-		}
-	}
-	deleteStackAddresses(objs, stackIdSetToDelete)
-	return nil
+	return processEvents(
+		objs.StackAddresses,
+		objs.ClosechanEvents,
+		func(mapIter *ebpf.MapIterator, stackIdSet map[int32]struct{}) (any, int) {
+			for mapIter.Next(&key, &value) {
+				stack, err := extractStack(objs, value.StackId)
+				if err != nil {
+					slog.Warn(err.Error())
+					continue
+				}
+				stackIdSet[value.StackId] = struct{}{}
+				keysToDelete = append(keysToDelete, key)
+				slog.Info("runtime.closechan",
+					slog.Int64("goroutine_id", int64(key.GoroutineId)),
+					slog.Int64("stack_id", int64(value.StackId)),
+					slog.Any("stack", stack),
+				)
+			}
+			return keysToDelete, len(keysToDelete)
+		},
+	)
 }
 
-func deleteStackAddresses(objs *bpfObjects, stackIdSet map[int32]struct{}) {
-	for stackId := range stackIdSet {
-		if err := objs.StackAddresses.Delete(stackId); err != nil {
+func processEvents(
+	stackAddrs, eventMap *ebpf.Map,
+	// stackIdSet is the set of stack_id to delete later.
+	// keysToDelete is the slice of eBPF map keys to delete later.
+	// keyLength holds the count of keys in keysToDelete to determine if BatchDelete is required.
+	processMap func(iter *ebpf.MapIterator, stackIdSet map[int32]struct{}) (keysToDelete any, keyLength int),
+) error {
+	stackIdSetToDelete := make(map[int32]struct{})
+	mapIter := eventMap.Iterate()
+	keysToDelete, keyLength := processMap(mapIter, stackIdSetToDelete)
+	if err := mapIter.Err(); err != nil {
+		return fmt.Errorf("failed to iterate eBPF map: %w", err)
+	}
+	if 0 < keyLength {
+		if n, err := eventMap.BatchDelete(keysToDelete, nil); err == nil {
+			slog.Debug("Deleted eBPF map", slog.Int("deleted", n), slog.Int("expected", keyLength))
+		} else {
+			slog.Warn("Failed to delete eBPF map", slog.String("error", err.Error()))
+		}
+	}
+	// Don't use BatchDelete for stack addresses because the opration is not supported.
+	// If we do it, we will see "batch delete: not supported" error.
+	for stackId := range stackIdSetToDelete {
+		if err := stackAddrs.Delete(stackId); err != nil {
 			slog.Warn("Failed to delete stack_addresses", slog.String("error", err.Error()))
 			continue
 		}
+		slog.Debug("Deleted stack address map", slog.Int("stack_id", int(stackId)))
 	}
+	return nil
 }
 
 func extractStack(objs *bpfObjects, stackId int32) ([]string, error) {
