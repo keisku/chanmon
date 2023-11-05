@@ -6,6 +6,18 @@
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
 
+// read_stack_id reads the stack id from stack trace map.
+// 1 on failure
+static __always_inline int read_stack_id(struct pt_regs *ctx, int *stack_id) {
+    int id = bpf_get_stackid(ctx, &stack_addresses, BPF_F_USER_STACK);
+    if (id < 0) {
+        bpf_printk("get stack id failed\n");
+        return 1;
+    }
+    *stack_id = id;
+    return 0;
+}
+
 // func makechan(t *chantype, size int) *hchan
 // https://github.com/golang/go/blob/go1.21.3/src/runtime/chan.go#L72
 SEC("uretprobe/runtime.makechan")
@@ -16,9 +28,8 @@ int runtime_makechan(struct pt_regs *ctx) {
         return 0;
     }
 
-    int stack_id = bpf_get_stackid(ctx, &stack_addresses, BPF_F_USER_STACK);
-    if (stack_id < 0) {
-        bpf_printk("get stack id failed\n");
+    int stack_id = 0;
+    if (read_stack_id(ctx, &stack_id)) {
         return 0;
     }
 
@@ -48,9 +59,8 @@ int runtime_chansend(struct pt_regs *ctx) {
         return 0;
     }
 
-    int stack_id = bpf_get_stackid(ctx, &stack_addresses, BPF_F_USER_STACK);
-    if (stack_id < 0) {
-        bpf_printk("get stack id failed\n");
+    int stack_id = 0;
+    if (read_stack_id(ctx, &stack_id)) {
         return 0;
     }
 
@@ -80,9 +90,8 @@ int runtime_chanrecv1(struct pt_regs *ctx) {
         return 0;
     }
 
-    int stack_id = bpf_get_stackid(ctx, &stack_addresses, BPF_F_USER_STACK);
-    if (stack_id < 0) {
-        bpf_printk("get stack id failed\n");
+    int stack_id = 0;
+    if (read_stack_id(ctx, &stack_id)) {
         return 0;
     }
 
@@ -115,9 +124,8 @@ int runtime_chanrecv2(struct pt_regs *ctx) {
         return 0;
     }
 
-    int stack_id = bpf_get_stackid(ctx, &stack_addresses, BPF_F_USER_STACK);
-    if (stack_id < 0) {
-        bpf_printk("get stack id failed\n");
+    int stack_id = 0;
+    if (read_stack_id(ctx, &stack_id)) {
         return 0;
     }
 
@@ -147,9 +155,8 @@ int runtime_closechan(struct pt_regs *ctx) {
         return 0;
     }
 
-    int stack_id = bpf_get_stackid(ctx, &stack_addresses, BPF_F_USER_STACK);
-    if (stack_id < 0) {
-        bpf_printk("get stack id failed\n");
+    int stack_id = 0;
+    if (read_stack_id(ctx, &stack_id)) {
         return 0;
     }
 
