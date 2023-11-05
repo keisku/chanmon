@@ -120,7 +120,7 @@ func processMakechanEvents(objs *bpfObjects) error {
 					slog.Int64("goroutine_id", int64(key.GoroutineId)),
 					slog.Int64("stack_id", int64(value.StackId)),
 					slog.Int64("chan_size", int64(value.ChanSize)),
-					slog.Any("stack", stack),
+					stackToLogAttr(stack),
 				)
 			}
 			return keysToDelete, len(keysToDelete)
@@ -159,7 +159,7 @@ func processChansendEvents(objs *bpfObjects) error {
 					slog.Int64("stack_id", int64(value.StackId)),
 					slog.Bool("success", value.Success),
 					slog.String("function", translation[value.Function]),
-					slog.Any("stack", stack),
+					stackToLogAttr(stack),
 				)
 			}
 			return keysToDelete, len(keysToDelete)
@@ -190,7 +190,7 @@ func processChanrecvEvents(objs *bpfObjects) error {
 				attrs := []any{
 					slog.Int64("goroutine_id", int64(key.GoroutineId)),
 					slog.Int64("stack_id", int64(value.StackId)),
-					slog.Any("stack", stack),
+					stackToLogAttr(stack),
 				}
 				// As of Go version 1.21.3, there is no mechanism to access `selected` and `received`,
 				// which are the first and second return values of `runtime.chanrecv`, respectively.
@@ -240,7 +240,7 @@ func processClosechanEvents(objs *bpfObjects) error {
 				slog.Info("runtime.closechan",
 					slog.Int64("goroutine_id", int64(key.GoroutineId)),
 					slog.Int64("stack_id", int64(value.StackId)),
-					slog.Any("stack", stack),
+					stackToLogAttr(stack),
 				)
 			}
 			return keysToDelete, len(keysToDelete)
@@ -301,4 +301,15 @@ func extractStack(objs *bpfObjects, stackId int32) ([]string, error) {
 		stackCounter++
 	}
 	return stack[0:stackCounter], nil
+}
+
+func stackToLogAttr(stack []string) slog.Attr {
+	attrs := make([]slog.Attr, len(stack))
+	for i, s := range stack {
+		attrs[i] = slog.String(fmt.Sprintf("%d", i), s)
+	}
+	return slog.Attr{
+		Key:   "stack",
+		Value: slog.GroupValue(attrs...),
+	}
 }
