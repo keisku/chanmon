@@ -199,6 +199,10 @@ func processChanrecvEvents(objs *bpfObjects) error {
 
 	events := objs.ChanrecvEvents.Iterate()
 	for events.Next(&key, &event) {
+		if event.Function == 0 { // unknown
+			slog.Error("unreachable")
+			continue
+		}
 		stack, err := extractStack(objs, event.StackId)
 		if err != nil {
 			slog.Warn(err.Error())
@@ -233,9 +237,6 @@ func processChanrecvEvents(objs *bpfObjects) error {
 				slog.Bool("received", event.Received),
 				slog.String("function", "runtime.chanrecv2"),
 			)
-		default:
-			slog.Error("unreachable")
-			continue
 		}
 		slog.Info("runtime.chanrecv", attrs...)
 	}
