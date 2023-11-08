@@ -12,10 +12,6 @@ import (
 
 // TODO: Enable this to be used with binaries that are compiled again during runtime.
 
-var once sync.Once
-var lineEntries sync.Map
-var syms symbols
-
 type symbols struct {
 	mu sync.Mutex
 	s  *gosym.Table
@@ -39,22 +35,20 @@ func (syms *symbols) pcToLine(addr uint64) string {
 }
 
 var initErr error
+var initOnce sync.Once
+var lineEntries sync.Map
+var syms symbols
 
 // Init loads the debug info from the specified binary file and parsing its symbol and line number information.
 // This function is intended to be called once, with future calls being no-ops.
-func Init(binPath string) error {
-	once.Do(func() {
-		initErr = initialize(binPath)
+func Init(f *elf.File) error {
+	initOnce.Do(func() {
+		initErr = initialize(f)
 	})
 	return initErr
 }
 
-func initialize(binPath string) error {
-	f, err := elf.Open(binPath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
+func initialize(f *elf.File) error {
 	gopclntab := f.Section(".gopclntab")
 	textSection := f.Section(".text")
 	if gopclntab != nil && textSection != nil {

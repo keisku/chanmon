@@ -2,6 +2,7 @@ package ebpf
 
 import (
 	"context"
+	"debug/elf"
 	"encoding/binary"
 	"fmt"
 	"log/slog"
@@ -28,8 +29,12 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 	if err := loadBpfObjects(&objs, nil); err != nil {
 		return cancel, err
 	}
-	if err := addr2line.Init(binPath); err != nil {
-		slog.Warn(fmt.Sprintf("faild to initialize addr2line: %s", err))
+	elfFile, err := elf.Open(binPath)
+	if err != nil {
+		return cancel, err
+	}
+	if err := addr2line.Init(elfFile); err != nil {
+		slog.Debug("initialize addr2line", slog.Any("err", err))
 	}
 	ex, err := link.OpenExecutable(binPath)
 	if err != nil {
