@@ -1,0 +1,17 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+	  {
+		"name": "Run channmon to monitor fixture",
+		"type": "go",
+		"request": "launch",
+		"mode": "exec",
+		"program": "${workspaceRoot}/bin/chanmon",
+		"args": [
+		  "${workspaceRoot}/bin/fixture/fixture"
+		],
+		"console": "integratedTerminal",
+		"asRoot": true
+	  }
+	]
+}
