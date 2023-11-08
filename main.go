@@ -12,6 +12,7 @@ import (
 
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/keisku/chanmon/ebpf"
+	"github.com/keisku/chanmon/kernel"
 )
 
 var level slog.Level
@@ -40,7 +41,11 @@ func main() {
 	if err != nil {
 		errlog.Fatalln(err)
 	}
-	slog.Debug("eBPF program starts")
+	slog.Debug(
+		"eBPF program starts",
+		slog.String("kernel_release", kernel.Release()),
+		slog.String("required_kernel_release", ">=6.2"),
+	)
 
 	<-ctx.Done()
 	slog.Debug("exit...")
