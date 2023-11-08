@@ -56,12 +56,13 @@ func initialize(binPath string) error {
 	}
 	defer f.Close()
 	gopclntab := f.Section(".gopclntab")
-	if gopclntab != nil {
-		lineTableData, err := gopclntab.Data()
+	textSection := f.Section(".text")
+	if gopclntab != nil && textSection != nil {
+		gopclntabData, err := gopclntab.Data()
 		if err != nil {
 			return fmt.Errorf("failed to read .gopclntab section: %w", err)
 		}
-		lineTable := gosym.NewLineTable(lineTableData, f.Section(".text").Addr)
+		lineTable := gosym.NewLineTable(gopclntabData, textSection.Addr)
 		s, err := gosym.NewTable(nil, lineTable)
 		if err != nil {
 			return fmt.Errorf("failed to parse symbols: %w", err)
