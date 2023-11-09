@@ -71,7 +71,7 @@ func initialize(f *elf.File) error {
 	}
 
 	// Fallback to DWARF when loading `.gopclntab` fails.
-	// Reference code: https://github.com/golang/go/blob/go1.21.3/src/debug/dwarf/line_test.go#L181-L255
+	// Reference code: https://github.com/golang/go/blob/go1.21.4/src/debug/dwarf/line_test.go#L181-L255
 	d, err := f.DWARF()
 	if err != nil {
 		return fmt.Errorf("failed to read DWARF: %w", err)

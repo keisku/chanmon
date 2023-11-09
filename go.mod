@@ -1,6 +1,6 @@
 module github.com/keisku/chanmon
 
-go 1.21.3
+go 1.21.4
 
 require (
 	github.com/cilium/ebpf v0.12.2
