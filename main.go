@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"runtime"
@@ -20,6 +22,7 @@ import (
 var level slog.Level
 var pid int
 var binPath string
+var pprofPort int
 
 func main() {
 	errlog := log.New(os.Stderr, "", log.LstdFlags)
@@ -28,10 +31,11 @@ func main() {
 		errlog.Fatalln("chanmon only works on amd64 Linux")
 	}
 
-	flag.StringVar(&binPath, "path", binPath, "Path to executable file to be monitored")
+	flag.StringVar(&binPath, "path", binPath, "Path to executable file to be monitored (required)")
 	flag.TextVar(&level, "level", level, fmt.Sprintf("log level could be one of %q",
 		[]slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError}))
 	flag.IntVar(&pid, "pid", pid, "Useful when tracing programs that have many running instances")
+	flag.IntVar(&pprofPort, "pprof-port", pprofPort, "Port to be used for pprof server")
 	flag.Parse()
 	opts := &slog.HandlerOptions{Level: level}
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, opts)))
@@ -57,6 +61,11 @@ func main() {
 		slog.String("kernel_release", kernel.Release()),
 		buildinfoAttrs,
 	)
+	if 1023 < pprofPort {
+		go func() {
+			_ = http.ListenAndServe(fmt.Sprintf("localhost:%d", pprofPort), nil)
+		}()
+	}
 
 	<-ctx.Done()
 	slog.Debug("exit...")
