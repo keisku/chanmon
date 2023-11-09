@@ -19,6 +19,7 @@ import (
 
 var level slog.Level
 var pid int
+var binPath string
 
 func main() {
 	errlog := log.New(os.Stderr, "", log.LstdFlags)
@@ -27,14 +28,13 @@ func main() {
 		errlog.Fatalln("chanmon only works on amd64 Linux")
 	}
 
+	flag.StringVar(&binPath, "path", binPath, "Path to executable file to be monitored")
 	flag.TextVar(&level, "level", level, fmt.Sprintf("log level could be one of %q",
 		[]slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError}))
 	flag.IntVar(&pid, "pid", pid, "Useful when tracing programs that have many running instances")
 	flag.Parse()
 	opts := &slog.HandlerOptions{Level: level}
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, opts)))
-
-	binPath := os.Args[len(os.Args)-1]
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
