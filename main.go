@@ -18,6 +18,7 @@ import (
 )
 
 var level slog.Level
+var pid int
 
 func main() {
 	errlog := log.New(os.Stderr, "", log.LstdFlags)
@@ -28,6 +29,7 @@ func main() {
 
 	flag.TextVar(&level, "level", level, fmt.Sprintf("log level could be one of %q",
 		[]slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError}))
+	flag.IntVar(&pid, "pid", pid, "Useful when tracing programs that have many running instances")
 	flag.Parse()
 	opts := &slog.HandlerOptions{Level: level}
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, opts)))
@@ -41,7 +43,7 @@ func main() {
 		errlog.Fatalln(err)
 	}
 
-	eBPFClose, err := ebpf.Run(ctx, binPath)
+	eBPFClose, err := ebpf.Run(ctx, binPath, pid)
 	if err != nil {
 		errlog.Fatalln(err)
 	}

@@ -23,7 +23,7 @@ const maxStackDepth = 20
 
 var stackFrameSize = (strconv.IntSize / 8)
 
-func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
+func Run(ctx context.Context, binPath string, pid int) (context.CancelFunc, error) {
 	wrappedCtx, cancel := context.WithCancel(ctx)
 	objs := bpfObjects{}
 	if err := loadBpfObjects(&objs, nil); err != nil {
@@ -47,13 +47,13 @@ func Run(ctx context.Context, binPath string) (context.CancelFunc, error) {
 		ret    bool
 	}
 	uprobeArgs := []uprobeArguments{
-		{"runtime.makechan", objs.RuntimeMakechan, nil, true},
-		{"runtime.chansend1", objs.RuntimeChansend1, nil, true},
-		{"runtime.selectnbsend", objs.RuntimeSelectnbsend, nil, true},
-		{"runtime.reflect_chansend", objs.RuntimeReflectChansend, nil, true},
-		{"runtime.chanrecv1", objs.RuntimeChanrecv1, nil, true},
-		{"runtime.chanrecv2", objs.RuntimeChanrecv2, nil, true},
-		{"runtime.closechan", objs.RuntimeClosechan, nil, true},
+		{"runtime.makechan", objs.RuntimeMakechan, uprobeOptions(pid), true},
+		{"runtime.chansend1", objs.RuntimeChansend1, uprobeOptions(pid), true},
+		{"runtime.selectnbsend", objs.RuntimeSelectnbsend, uprobeOptions(pid), true},
+		{"runtime.reflect_chansend", objs.RuntimeReflectChansend, uprobeOptions(pid), true},
+		{"runtime.chanrecv1", objs.RuntimeChanrecv1, uprobeOptions(pid), true},
+		{"runtime.chanrecv2", objs.RuntimeChanrecv2, uprobeOptions(pid), true},
+		{"runtime.closechan", objs.RuntimeClosechan, uprobeOptions(pid), true},
 	}
 	uprobeLinks := make([]link.Link, 0, len(uprobeArgs))
 	for i := 0; i < len(uprobeArgs); i++ {
@@ -319,4 +319,11 @@ func stackToLogAttr(stack []string) slog.Attr {
 		Key:   "stack",
 		Value: slog.GroupValue(attrs...),
 	}
+}
+
+func uprobeOptions(pid int) *link.UprobeOptions {
+	if 0 < pid {
+		return &link.UprobeOptions{PID: pid}
+	}
+	return nil
 }
