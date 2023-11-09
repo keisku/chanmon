@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"debug/buildinfo"
 	"flag"
 	"fmt"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strings"
 
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/keisku/chanmon/ebpf"
@@ -30,6 +32,8 @@ func main() {
 	opts := &slog.HandlerOptions{Level: level}
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, opts)))
 
+	binPath := os.Args[len(os.Args)-1]
+
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
@@ -37,17 +41,41 @@ func main() {
 		errlog.Fatalln(err)
 	}
 
-	eBPFClose, err := ebpf.Run(ctx, os.Args[len(os.Args)-1])
+	eBPFClose, err := ebpf.Run(ctx, binPath)
 	if err != nil {
 		errlog.Fatalln(err)
 	}
+	buildinfoAttrs, err := loadBuildinfo(binPath)
+	if err != nil {
+		slog.Debug(err.Error())
+	}
 	slog.Debug(
-		"eBPF program starts",
+		"Go channel monitor starts",
+		slog.String("binary_path", binPath),
 		slog.String("kernel_release", kernel.Release()),
-		slog.String("required_kernel_release", ">=6.2"),
+		buildinfoAttrs,
 	)
 
 	<-ctx.Done()
 	slog.Debug("exit...")
 	eBPFClose()
+}
+
+func loadBuildinfo(binPath string) (slog.Attr, error) {
+	debugBuildinfo, err := buildinfo.ReadFile(binPath)
+	if err != nil {
+		return slog.Attr{}, fmt.Errorf("read buildinfo: %w", err)
+	}
+	args := []any{"version", debugBuildinfo.GoVersion}
+	for _, s := range debugBuildinfo.Settings {
+		if s.Value == "" {
+			continue
+		}
+		key := s.Key
+		if strings.HasPrefix(s.Key, "-") {
+			key = strings.TrimPrefix(key, "-")
+		}
+		args = append(args, []any{key, s.Value}...)
+	}
+	return slog.Group("buildinfo", args...), nil
 }
