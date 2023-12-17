@@ -199,7 +199,7 @@ func processChanrecvEvents(objs *bpfObjects) error {
 					slog.Int64("stack_id", int64(value.StackId)),
 					stackToLogAttr(stack),
 				}
-				// As of Go version 1.21.4, there is no mechanism to access `selected` and `received`,
+				// As of Go version 1.21.5, there is no mechanism to access `selected` and `received`,
 				// which are the first and second return values of `runtime.chanrecv`, respectively.
 				// They are stored in the rax and rbx registers of the amd64 architecture.
 				// Upon examining the assembly code of `runtime.chanrecv` through gdb,

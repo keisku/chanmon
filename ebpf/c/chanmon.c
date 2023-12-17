@@ -19,7 +19,7 @@ static __always_inline int read_stack_id(struct pt_regs *ctx, int *stack_id) {
 }
 
 // func makechan(t *chantype, size int) *hchan
-// https://github.com/golang/go/blob/go1.21.4/src/runtime/chan.go#L72
+// https://github.com/golang/go/blob/go1.21.5/src/runtime/chan.go#L72
 SEC("uretprobe/runtime.makechan")
 int runtime_makechan(struct pt_regs *ctx) {
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
@@ -52,7 +52,7 @@ int runtime_makechan(struct pt_regs *ctx) {
 // func chansend1(c *hchan, elem unsafe.Pointer) {
 // 	chansend(c, elem, true, getcallerpc())
 // }
-// https://github.com/golang/go/blob/go1.21.4/src/runtime/chan.go#L144
+// https://github.com/golang/go/blob/go1.21.5/src/runtime/chan.go#L144
 SEC("uretprobe/runtime.chansend1")
 int runtime_chansend1(struct pt_regs *ctx) {
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
@@ -82,7 +82,7 @@ int runtime_chansend1(struct pt_regs *ctx) {
 // func selectnbsend(c *hchan, elem unsafe.Pointer) (selected bool) {
 // 	return chansend(c, elem, false, getcallerpc())
 // }
-// https://github.com/golang/go/blob/go1.21.4/src/runtime/chan.go#L693
+// https://github.com/golang/go/blob/go1.21.5/src/runtime/chan.go#L693
 SEC("uretprobe/runtime.selectnbsend")
 int runtime_selectnbsend(struct pt_regs *ctx) {
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
@@ -112,7 +112,7 @@ int runtime_selectnbsend(struct pt_regs *ctx) {
 // func reflect_chansend(c *hchan, elem unsafe.Pointer, nb bool) (selected bool) {
 // 	return chansend(c, elem, !nb, getcallerpc())
 // }
-// https://github.com/golang/go/blob/go1.21.4/src/runtime/chan.go#L718
+// https://github.com/golang/go/blob/go1.21.5/src/runtime/chan.go#L718
 SEC("uretprobe/runtime.reflect_chansend")
 int runtime_reflect_chansend(struct pt_regs *ctx) {
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
@@ -142,7 +142,7 @@ int runtime_reflect_chansend(struct pt_regs *ctx) {
 // func chanrecv1(c *hchan, elem unsafe.Pointer) {
 // 	chanrecv(c, elem, true)
 // }
-// https://github.com/golang/go/blob/go1.21.4/src/runtime/chan.go#L441
+// https://github.com/golang/go/blob/go1.21.5/src/runtime/chan.go#L441
 SEC("uretprobe/runtime.chanrecv1")
 int runtime_chanrecv1(struct pt_regs *ctx) {
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
@@ -176,7 +176,7 @@ int runtime_chanrecv1(struct pt_regs *ctx) {
 // 	_, received = chanrecv(c, elem, true)
 // 	return
 // }
-// https://github.com/golang/go/blob/go1.21.4/src/runtime/chan.go#L446
+// https://github.com/golang/go/blob/go1.21.5/src/runtime/chan.go#L446
 SEC("uretprobe/runtime.chanrecv2")
 int runtime_chanrecv2(struct pt_regs *ctx) {
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
@@ -207,7 +207,7 @@ int runtime_chanrecv2(struct pt_regs *ctx) {
 }
 
 // func closechan(c *hchan)
-// https://github.com/golang/go/blob/go1.21.4/src/runtime/chan.go#L357
+// https://github.com/golang/go/blob/go1.21.5/src/runtime/chan.go#L357
 SEC("uretprobe/runtime.closechan")
 int runtime_closechan(struct pt_regs *ctx) {
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
