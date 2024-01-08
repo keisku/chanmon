@@ -44,12 +44,26 @@ type bpfClosechanEventKey struct {
 	Ktime       uint64
 }
 
+type bpfGoexit1Event struct{ StackId int32 }
+
+type bpfGoexit1EventKey struct {
+	GoroutineId int64
+	Ktime       uint64
+}
+
 type bpfMakechanEvent struct {
 	StackId  int32
 	ChanSize int32
 }
 
 type bpfMakechanEventKey struct {
+	GoroutineId int64
+	Ktime       uint64
+}
+
+type bpfNewproc1Event struct{ StackId int32 }
+
+type bpfNewproc1EventKey struct {
 	GoroutineId int64
 	Ktime       uint64
 }
@@ -101,7 +115,9 @@ type bpfProgramSpecs struct {
 	RuntimeChanrecv2       *ebpf.ProgramSpec `ebpf:"runtime_chanrecv2"`
 	RuntimeChansend1       *ebpf.ProgramSpec `ebpf:"runtime_chansend1"`
 	RuntimeClosechan       *ebpf.ProgramSpec `ebpf:"runtime_closechan"`
+	RuntimeGoexit1         *ebpf.ProgramSpec `ebpf:"runtime_goexit1"`
 	RuntimeMakechan        *ebpf.ProgramSpec `ebpf:"runtime_makechan"`
+	RuntimeNewproc1        *ebpf.ProgramSpec `ebpf:"runtime_newproc1"`
 	RuntimeReflectChansend *ebpf.ProgramSpec `ebpf:"runtime_reflect_chansend"`
 	RuntimeSelectnbsend    *ebpf.ProgramSpec `ebpf:"runtime_selectnbsend"`
 }
@@ -113,7 +129,9 @@ type bpfMapSpecs struct {
 	ChanrecvEvents  *ebpf.MapSpec `ebpf:"chanrecv_events"`
 	ChansendEvents  *ebpf.MapSpec `ebpf:"chansend_events"`
 	ClosechanEvents *ebpf.MapSpec `ebpf:"closechan_events"`
+	Goexit1Events   *ebpf.MapSpec `ebpf:"goexit1_events"`
 	MakechanEvents  *ebpf.MapSpec `ebpf:"makechan_events"`
+	Newproc1Events  *ebpf.MapSpec `ebpf:"newproc1_events"`
 	StackAddresses  *ebpf.MapSpec `ebpf:"stack_addresses"`
 }
 
@@ -139,7 +157,9 @@ type bpfMaps struct {
 	ChanrecvEvents  *ebpf.Map `ebpf:"chanrecv_events"`
 	ChansendEvents  *ebpf.Map `ebpf:"chansend_events"`
 	ClosechanEvents *ebpf.Map `ebpf:"closechan_events"`
+	Goexit1Events   *ebpf.Map `ebpf:"goexit1_events"`
 	MakechanEvents  *ebpf.Map `ebpf:"makechan_events"`
+	Newproc1Events  *ebpf.Map `ebpf:"newproc1_events"`
 	StackAddresses  *ebpf.Map `ebpf:"stack_addresses"`
 }
 
@@ -148,7 +168,9 @@ func (m *bpfMaps) Close() error {
 		m.ChanrecvEvents,
 		m.ChansendEvents,
 		m.ClosechanEvents,
+		m.Goexit1Events,
 		m.MakechanEvents,
+		m.Newproc1Events,
 		m.StackAddresses,
 	)
 }
@@ -161,7 +183,9 @@ type bpfPrograms struct {
 	RuntimeChanrecv2       *ebpf.Program `ebpf:"runtime_chanrecv2"`
 	RuntimeChansend1       *ebpf.Program `ebpf:"runtime_chansend1"`
 	RuntimeClosechan       *ebpf.Program `ebpf:"runtime_closechan"`
+	RuntimeGoexit1         *ebpf.Program `ebpf:"runtime_goexit1"`
 	RuntimeMakechan        *ebpf.Program `ebpf:"runtime_makechan"`
+	RuntimeNewproc1        *ebpf.Program `ebpf:"runtime_newproc1"`
 	RuntimeReflectChansend *ebpf.Program `ebpf:"runtime_reflect_chansend"`
 	RuntimeSelectnbsend    *ebpf.Program `ebpf:"runtime_selectnbsend"`
 }
@@ -172,7 +196,9 @@ func (p *bpfPrograms) Close() error {
 		p.RuntimeChanrecv2,
 		p.RuntimeChansend1,
 		p.RuntimeClosechan,
+		p.RuntimeGoexit1,
 		p.RuntimeMakechan,
+		p.RuntimeNewproc1,
 		p.RuntimeReflectChansend,
 		p.RuntimeSelectnbsend,
 	)
